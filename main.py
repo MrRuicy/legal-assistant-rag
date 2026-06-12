@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from src import config
 from src.parser import parse_all_civil_code, save_to_json
 from src.vector_store import build_vector_store
-from src.web import create_app
+from src.web import create_app, CUSTOM_CSS
 
 
 def setup():
@@ -37,7 +37,7 @@ def serve():
 
     print("=== Starting Gradio Web ===")
     app = create_app()
-    app.launch(server_name="127.0.0.1", server_port=7860, share=False, inbrowser=True, theme=gr.themes.Soft())
+    app.launch(server_name="127.0.0.1", server_port=7860, share=False, inbrowser=True, theme=gr.themes.Soft(), css=CUSTOM_CSS)
 
 
 if __name__ == "__main__":

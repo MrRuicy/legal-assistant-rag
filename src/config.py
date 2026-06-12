@@ -30,6 +30,22 @@ MODELSCOPE_API_KEY = os.getenv("MODELSCOPE_API_KEY", "")
 MODELSCOPE_BASE_URL = os.getenv("MODELSCOPE_BASE_URL", "https://api-inference.modelscope.cn/v1")
 LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-ai/DeepSeek-V3.2")
 
+# ---- LLM 模型优先级列表（配额超限自动故障转移）----
+# ModelScope 免费配额按模型分别计算（每模型约 20 次/天）。当首选模型 429 配额超限时，
+# 自动按顺序切换到下一个模型，用户无感知（仅多等片刻）。
+# LLM_MODEL 作为首选，其后是备选链；可在 .env 用 LLM_FALLBACK_MODELS 覆盖（逗号分隔）。
+_DEFAULT_FALLBACKS = [
+    "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "ZhipuAI/GLM-5",
+    "deepseek-ai/DeepSeek-V4-Flash",
+    "MiniMax/MiniMax-M2.5",
+    "deepseek-ai/DeepSeek-V3.2",
+]
+_fallback_env = os.getenv("LLM_FALLBACK_MODELS", "")
+_fallbacks = [m.strip() for m in _fallback_env.split(",") if m.strip()] or _DEFAULT_FALLBACKS
+# 首选模型置顶，去重并保持顺序
+LLM_MODELS = list(dict.fromkeys([LLM_MODEL] + _fallbacks))
+
 # ---- Embedding 供应商切换 ----
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "modelscope").lower()
 
@@ -40,7 +56,9 @@ SILICONFLOW_BASE_URL = os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflo
 SILICONFLOW_EMBED_MODEL = os.getenv("SILICONFLOW_EMBED_MODEL", "BAAI/bge-m3")
 
 # ---- 检索参数 ----
-TOP_K = int(os.getenv("TOP_K", "5"))
+# 默认 8：实测民法典问题常涉及相邻条文，top_k=5→8 使 Recall 0.75→0.90、Hit 0.92→0.96，
+# 且 MRR 不降（首个命中排名不受多召回影响）。再大边际收益递减且徒增 LLM 上下文。
+TOP_K = int(os.getenv("TOP_K", "8"))
 
 # ---- Rerank（精排，默认关闭）----
 # 实测：bge-m3 向量召回质量已很高，rerank（bge-reranker-v2-m3）对民法典短条文
