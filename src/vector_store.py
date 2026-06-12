@@ -10,12 +10,16 @@ from tqdm import tqdm
 
 from . import config
 from .embedding import EmbeddingClient
+from .reranker import Reranker
+from .bm25_retriever import BM25Retriever
 from .parser import LawArticle
 
 
 class VectorStore:
     def __init__(self):
         self.embed_client = EmbeddingClient()
+        self.reranker = Reranker() if config.RERANK_ENABLED else None
+        self.bm25 = BM25Retriever.from_json() if config.HYBRID_ENABLED else None
         self.chroma_client = chromadb.PersistentClient(
             path=str(config.VECTOR_STORE_DIR)
         )
@@ -67,28 +71,143 @@ class VectorStore:
         print(f"OK - Vector store built: {self.collection.count()} articles")
 
     def search(self, query: str, top_k: int = None) -> List[Dict]:
-        """检索：返回 top_k 条最相关的法律条文（带 metadata）。"""
-        top_k = top_k or config.TOP_K
-        query_vec = self.embed_client.embed_query(query)
+        """检索：混合召回（向量 + BM25，RRF 融合）→（可选）rerank → 阈值过滤。
 
+        流程：
+        1. 召回候选：向量一路；开启混合时再加 BM25 一路，两路 RRF 融合。
+        2. （可选）rerank 精排。默认关闭——实测对民法典短条文场景无正向价值。
+        3. 阈值过滤（基于 rerank 分数，仅在 rerank 开启且阈值>0 时生效）。
+        """
+        top_k = top_k or config.TOP_K
+
+        # rerank 开启时需要更多候选供精排；否则按融合所需候选数
+        n_final = config.RERANK_CANDIDATES if self.reranker else top_k
+
+        # 1. 召回 + 融合
+        if self.bm25:
+            candidates = self._hybrid_search(query, n_final)
+        else:
+            candidates = self._vector_search(query, n_final)
+        if not candidates:
+            return []
+
+        # 1.5 相关性闸门：若所有候选的向量距离都超过阈值，判定问题与民法典无关，
+        # 返回空（交由上层回"未找到相关条文"），避免把无关条文喂给 LLM 诱发幻觉。
+        if config.MAX_DISTANCE > 0:
+            dists = [c["distance"] for c in candidates if c.get("distance") is not None]
+            if dists and min(dists) > config.MAX_DISTANCE:
+                return []
+
+        # 2. rerank 精排（默认关闭）
+        if self.reranker:
+            candidates = self._apply_rerank(query, candidates, top_k)
+        else:
+            candidates = candidates[:top_k]
+
+        # 3. 阈值过滤（仅当有 rerank 分数时生效）
+        if config.RELEVANCE_THRESHOLD > 0:
+            candidates = [
+                c for c in candidates
+                if c.get("rerank_score") is None
+                or c["rerank_score"] >= config.RELEVANCE_THRESHOLD
+            ]
+
+        return candidates
+
+    def _hybrid_search(self, query: str, top_k: int) -> List[Dict]:
+        """向量 + BM25 两路召回，RRF 融合后取 top_k 条。
+
+        RRF：score = Σ 1/(RRF_K + rank)，rank 为该条在各路结果中的名次（从0起）。
+        只出现在一路的条文也参与排序，从而兼顾语义召回与关键词召回。
+        """
+        n = config.HYBRID_CANDIDATES
+        vec_hits = self._vector_search(query, n)
+        bm25_hits = self.bm25.search(query, n)
+
+        # 以 article_no 为键合并两路；保留各自的分数字段便于调试/展示
+        merged: Dict[int, Dict] = {}
+        rrf: Dict[int, float] = {}
+
+        for rank, h in enumerate(vec_hits):
+            key = h["article_no"]
+            merged.setdefault(key, h)
+            rrf[key] = rrf.get(key, 0.0) + config.HYBRID_VECTOR_WEIGHT / (config.RRF_K + rank)
+
+        for rank, h in enumerate(bm25_hits):
+            key = h["article_no"]
+            if key in merged:
+                merged[key]["bm25_score"] = h.get("bm25_score")
+            else:
+                merged[key] = h
+            rrf[key] = rrf.get(key, 0.0) + config.HYBRID_BM25_WEIGHT / (config.RRF_K + rank)
+
+        # 按 RRF 分数降序
+        ordered = sorted(merged.values(), key=lambda h: rrf[h["article_no"]], reverse=True)
+        for h in ordered:
+            h.setdefault("distance", None)
+            h.setdefault("bm25_score", None)
+            h.setdefault("rerank_score", None)
+        return ordered[:top_k]
+
+    def _vector_search(self, query: str, n_results: int) -> List[Dict]:
+        """纯向量检索，返回 n_results 条候选（带 distance）。"""
+        query_vec = self.embed_client.embed_query(query)
         results = self.collection.query(
             query_embeddings=[query_vec],
-            n_results=top_k,
+            n_results=n_results,
         )
 
-        # 整理返回格式
         hits = []
         for i in range(len(results['ids'][0])):
+            meta = results['metadatas'][0][i]
             hits.append({
-                "article_no": results['metadatas'][0][i]['article_no'],
-                "law_name": results['metadatas'][0][i]['law_name'],
-                "part": results['metadatas'][0][i]['part'],
-                "chapter": results['metadatas'][0][i]['chapter'],
-                "section": results['metadatas'][0][i]['section'],
-                "article_text": results['metadatas'][0][i]['article_text'],
+                "article_no": meta['article_no'],
+                "law_name": meta['law_name'],
+                "part": meta['part'],
+                "chapter": meta['chapter'],
+                "section": meta['section'],
+                "article_text": meta['article_text'],
                 "distance": results['distances'][0][i] if 'distances' in results else None,
+                "rerank_score": None,
             })
         return hits
+
+    def _apply_rerank(self, query: str, candidates: List[Dict], top_k: int) -> List[Dict]:
+        """融合向量排名与 rerank 排名（RRF），取 top_k 条。
+
+        实测纯 rerank 排序虽提升召回广度，但会把向量排第一的正确条文挪后、
+        损害 MRR。故用 Reciprocal Rank Fusion 融合两路排名，兼顾召回与精度：
+        score = 1/(k+vec_rank) + 1/(k+rerank_rank)。
+        rerank 失败时降级为原向量顺序，保证可用性。
+        """
+        docs = [
+            f"《民法典》第{c['article_no']}条 {c['article_text']}"
+            for c in candidates
+        ]
+        try:
+            ranked = self.reranker.rerank(query, docs, top_n=len(candidates))
+        except Exception as e:
+            print(f"WARN - rerank 失败，降级为向量检索顺序：{e}")
+            return candidates[:top_k]
+
+        # 向量排名（候选已按向量相似度降序）与 rerank 分数
+        RRF_K = 10  # RRF 常数：候选数小，取小值让排名差异更敏感
+        rerank_rank = {r["index"]: rank for rank, r in enumerate(ranked)}
+        rerank_score = {r["index"]: r["score"] for r in ranked}
+
+        fused = []
+        for vec_rank, c in enumerate(candidates):
+            rr = rerank_rank.get(vec_rank, len(candidates))
+            rrf = 1.0 / (RRF_K + vec_rank) + 1.0 / (RRF_K + rr)
+            hit = dict(c)
+            hit["rerank_score"] = rerank_score.get(vec_rank)
+            hit["_rrf"] = rrf
+            fused.append(hit)
+
+        fused.sort(key=lambda h: h["_rrf"], reverse=True)
+        for h in fused:
+            del h["_rrf"]
+        return fused[:top_k]
 
 
 def build_vector_store():

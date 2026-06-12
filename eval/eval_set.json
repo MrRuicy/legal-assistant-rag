@@ -1,0 +1,127 @@
+[
+  {
+    "question": "禁止家庭暴力，受害方可以采取什么措施？",
+    "expected_articles": [1042, 1091],
+    "note": "婚姻家庭编 - 家庭暴力"
+  },
+  {
+    "question": "父母对成年子女还有抚养义务吗？",
+    "expected_articles": [1067],
+    "note": "婚姻家庭编 - 抚养费"
+  },
+  {
+    "question": "夫妻一方擅自处分共同财产，另一方能否主张无效？",
+    "expected_articles": [1062, 1060],
+    "note": "婚姻家庭编 - 夫妻共同财产"
+  },
+  {
+    "question": "什么是居住权？如何设立？",
+    "expected_articles": [366, 367, 368],
+    "note": "物权编 - 居住权"
+  },
+  {
+    "question": "因第三人原因造成他人损害，谁来承担责任？",
+    "expected_articles": [1165, 1175],
+    "note": "侵权责任编 - 过错责任"
+  },
+  {
+    "question": "高空抛物致人损害怎么赔偿？",
+    "expected_articles": [1254],
+    "note": "侵权责任编 - 高空抛物"
+  },
+  {
+    "question": "饲养的宠物咬伤他人，主人要赔偿吗？",
+    "expected_articles": [1245, 1246, 1247],
+    "note": "侵权责任编 - 饲养动物损害"
+  },
+  {
+    "question": "遗产包括哪些范围？",
+    "expected_articles": [1122],
+    "note": "继承编 - 遗产范围"
+  },
+  {
+    "question": "没有遗嘱时，谁是第一顺序继承人？",
+    "expected_articles": [1127],
+    "note": "继承编 - 法定继承顺序"
+  },
+  {
+    "question": "赠与合同可以撤销吗？",
+    "expected_articles": [658, 663],
+    "note": "合同编 - 赠与撤销"
+  },
+  {
+    "question": "定金的数额有上限吗？超过部分如何处理？",
+    "expected_articles": [586, 587],
+    "note": "合同编 - 定金罚则"
+  },
+  {
+    "question": "民事主体从事民事活动应当遵循什么基本原则？",
+    "expected_articles": [4, 5, 6, 7],
+    "note": "总则 - 基本原则"
+  },
+  {
+    "question": "多少岁是完全民事行为能力人？",
+    "expected_articles": [17, 18],
+    "note": "总则 - 民事行为能力"
+  },
+  {
+    "question": "宣告失踪需要满足什么条件？",
+    "expected_articles": [40, 41],
+    "note": "总则 - 宣告失踪"
+  },
+  {
+    "question": "诉讼时效一般是多少年？",
+    "expected_articles": [188],
+    "note": "总则 - 诉讼时效"
+  },
+  {
+    "question": "自然人的人格权包括哪些？",
+    "expected_articles": [990, 991],
+    "note": "人格权编 - 人格权范围"
+  },
+  {
+    "question": "未经同意使用他人肖像构成侵权吗？",
+    "expected_articles": [1019, 1018],
+    "note": "人格权编 - 肖像权"
+  },
+  {
+    "question": "隐私权保护的内容有哪些？",
+    "expected_articles": [1032, 1033],
+    "note": "人格权编 - 隐私权"
+  },
+  {
+    "question": "无效合同的财产应当如何返还？",
+    "expected_articles": [157],
+    "note": "总则 - 民事法律行为无效后果"
+  },
+  {
+    "question": "相邻不动产之间用水排水有纠纷怎么办？",
+    "expected_articles": [290, 291],
+    "note": "物权编 - 相邻关系"
+  },
+  {
+    "question": "拾得遗失物应当怎么处理？",
+    "expected_articles": [314, 315, 316],
+    "note": "物权编 - 拾得遗失物"
+  },
+  {
+    "question": "好意同乘（搭便车）发生事故，驾驶人要全额赔偿吗？",
+    "expected_articles": [1217],
+    "note": "侵权责任编 - 好意同乘"
+  },
+  {
+    "question": "网络服务提供者对侵权信息有什么义务？",
+    "expected_articles": [1195, 1194, 1197],
+    "note": "侵权责任编 - 网络侵权"
+  },
+  {
+    "question": "格式条款提供方有哪些提示说明义务？",
+    "expected_articles": [496, 497],
+    "note": "合同编 - 格式条款"
+  },
+  {
+    "question": "债权人可以将合同的权利转让给第三人吗？",
+    "expected_articles": [545, 546],
+    "note": "合同编 - 债权转让"
+  }
+]

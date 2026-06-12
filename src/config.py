@@ -32,6 +32,34 @@ SILICONFLOW_EMBED_MODEL = os.getenv("SILICONFLOW_EMBED_MODEL", "BAAI/bge-m3")
 # ---- 检索参数 ----
 TOP_K = int(os.getenv("TOP_K", "5"))
 
+# ---- Rerank（精排，默认关闭）----
+# 实测：bge-m3 向量召回质量已很高，rerank（bge-reranker-v2-m3）对民法典短条文
+# 场景反而损害排序精度（MRR），故默认关闭。保留实现作为可选项，可在 .env 开启对比。
+# 召回阶段先取 RERANK_CANDIDATES 条，rerank 精排后取 TOP_K 条。
+RERANK_ENABLED = os.getenv("RERANK_ENABLED", "false").lower() == "true"
+RERANK_CANDIDATES = int(os.getenv("RERANK_CANDIDATES", "10"))
+# rerank 供应商目前复用 SiliconFlow（与 embedding 同一 key，OpenAI 兼容外的独立 /rerank 接口）
+SILICONFLOW_RERANK_MODEL = os.getenv("SILICONFLOW_RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
+# 相关性阈值：rerank 分数低于此值的条文视为不相关并丢弃（0~1，0 表示不过滤）
+RELEVANCE_THRESHOLD = float(os.getenv("RELEVANCE_THRESHOLD", "0"))
+# 向量距离阈值：若最相关条文的余弦距离仍大于此值，判定问题与民法典无关，
+# 返回空（触发"未找到相关条文"），避免把无关条文喂给 LLM 诱发幻觉。
+# 实测：真实法律问题 distance≈0.6~0.9，无关问题（天气/菜谱）≥1.2，故阈值取 1.0。
+# 设为 0 可关闭该过滤。
+MAX_DISTANCE = float(os.getenv("MAX_DISTANCE", "1.0"))
+
+# ---- 混合检索（向量 + BM25 关键词，RRF 融合）----
+# 向量擅长语义，BM25 擅长法律术语精确匹配，两路 RRF 融合提升召回。
+HYBRID_ENABLED = os.getenv("HYBRID_ENABLED", "true").lower() == "true"
+# 每一路召回的候选数（融合后再取 TOP_K）
+HYBRID_CANDIDATES = int(os.getenv("HYBRID_CANDIDATES", "20"))
+# RRF 融合常数，越小则排名靠前项权重越大
+RRF_K = int(os.getenv("RRF_K", "10"))
+# 两路权重：向量召回质量高，给更高权重，让 BM25 只补召回不主导 top 排名。
+# 实测 vec=5/bm25=1 时混合检索相比纯向量净赚召回率（Hit 0.88→0.92）而 MRR 基本持平。
+HYBRID_VECTOR_WEIGHT = float(os.getenv("HYBRID_VECTOR_WEIGHT", "5.0"))
+HYBRID_BM25_WEIGHT = float(os.getenv("HYBRID_BM25_WEIGHT", "1.0"))
+
 
 def embedding_config() -> dict:
     """返回当前生效的 embedding 供应商配置。"""
