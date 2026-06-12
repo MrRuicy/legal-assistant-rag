@@ -52,8 +52,10 @@ def _format_refs(hits) -> str:
 def create_app():
     rag = LegalRAG()
 
-    def chat_stream(question: str, history: list, top_k: int):
+    def chat_stream(question: str, history: list):
         """Gradio 流式回调：generator。
+
+        检索条数由 config.TOP_K 设定（已用评估集调优为 8），不暴露给终端用户。
 
         Yields:
             (history, refs_md, verify_html): 对话历史、引用条文、引用校验徽章
@@ -73,7 +75,7 @@ def create_app():
         refs_hits = []
         answer_parts = []
 
-        for chunk in rag.answer_stream(question, history=prior_history, top_k=top_k):
+        for chunk in rag.answer_stream(question, history=prior_history):
             ctype = chunk["type"]
             if ctype == "rewrite":
                 continue  # 查询改写仅影响检索，不在对话框展示
@@ -122,27 +124,23 @@ def create_app():
                     submit_btn = gr.Button("发送", variant="primary", scale=1, min_width=70)
                     clear_btn = gr.Button("清空", scale=1, min_width=60)
 
-            # 右侧：引用校验徽章 + 检索条文
+            # 右侧：引用校验徽章（固定在顶）+ 检索条文（固定高度滚动）
             with gr.Column(scale=2):
                 verify_output = gr.HTML(label="引用校验")
-                with gr.Accordion("📜 检索到的条文", open=True):
-                    with gr.Column(elem_id="refs-box"):
-                        refs_output = gr.Markdown("_暂无检索结果_")
-                top_k_slider = gr.Slider(
-                    minimum=1, maximum=10, value=8, step=1,
-                    label="检索条文数（Top-K）",
-                )
+                gr.Markdown("#### 📜 检索到的条文")
+                with gr.Column(elem_id="refs-box"):
+                    refs_output = gr.Markdown("_暂无检索结果_")
 
         # 事件绑定
         submit_event = submit_btn.click(
             fn=chat_stream,
-            inputs=[question_input, chatbot, top_k_slider],
+            inputs=[question_input, chatbot],
             outputs=[chatbot, refs_output, verify_output],
         ).then(lambda: "", outputs=question_input)
 
         question_input.submit(
             fn=chat_stream,
-            inputs=[question_input, chatbot, top_k_slider],
+            inputs=[question_input, chatbot],
             outputs=[chatbot, refs_output, verify_output],
         ).then(lambda: "", outputs=question_input)
 
