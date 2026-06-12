@@ -3,8 +3,18 @@
 所有可调项通过 .env 注入，代码里不写死任何密钥。
 """
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
+
+# Windows 控制台默认 stdout 编码为 GBK，打印中文会乱码（终端按 UTF-8 解读）。
+# 此模块被所有入口导入，故在此统一把 stdout/stderr 切到 UTF-8，根治乱码。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
 
 load_dotenv()
 
