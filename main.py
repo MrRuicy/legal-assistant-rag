@@ -2,6 +2,8 @@
 import sys
 from pathlib import Path
 
+import gradio as gr
+
 # 确保能导入 src
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -35,7 +37,7 @@ def serve():
 
     print("=== Starting Gradio Web ===")
     app = create_app()
-    app.launch(server_name="127.0.0.1", server_port=7860, share=False, inbrowser=True)
+    app.launch(server_name="127.0.0.1", server_port=7860, share=False, inbrowser=True, theme=gr.themes.Soft())
 
 
 if __name__ == "__main__":

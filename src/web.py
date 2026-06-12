@@ -28,7 +28,7 @@ def create_app():
 
         return answer_full, refs_text
 
-    with gr.Blocks(title="民法典法律助手", theme=gr.themes.Soft()) as demo:
+    with gr.Blocks(title="民法典法律助手") as demo:
         gr.Markdown("# ⚖️ 民法典法律助手")
         gr.Markdown("基于 RAG 的《中华人民共和国民法典》智能问答系统")
 
@@ -71,4 +71,4 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.launch(server_name="127.0.0.1", server_port=7860, share=False, inbrowser=True)
+    app.launch(server_name="127.0.0.1", server_port=7860, share=False, inbrowser=True, theme=gr.themes.Soft())
