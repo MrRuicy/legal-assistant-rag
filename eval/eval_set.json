@@ -1,127 +1,134 @@
 [
-  {
-    "question": "禁止家庭暴力，受害方可以采取什么措施？",
-    "expected_articles": [1042, 1091],
-    "note": "婚姻家庭编 - 家庭暴力"
-  },
-  {
-    "question": "父母对成年子女还有抚养义务吗？",
-    "expected_articles": [1067],
-    "note": "婚姻家庭编 - 抚养费"
-  },
-  {
-    "question": "夫妻一方擅自处分共同财产，另一方能否主张无效？",
-    "expected_articles": [1062, 1060],
-    "note": "婚姻家庭编 - 夫妻共同财产"
-  },
-  {
-    "question": "什么是居住权？如何设立？",
-    "expected_articles": [366, 367, 368],
-    "note": "物权编 - 居住权"
-  },
-  {
-    "question": "因第三人原因造成他人损害，谁来承担责任？",
-    "expected_articles": [1165, 1175],
-    "note": "侵权责任编 - 过错责任"
-  },
-  {
-    "question": "高空抛物致人损害怎么赔偿？",
-    "expected_articles": [1254],
-    "note": "侵权责任编 - 高空抛物"
-  },
-  {
-    "question": "饲养的宠物咬伤他人，主人要赔偿吗？",
-    "expected_articles": [1245, 1246, 1247],
-    "note": "侵权责任编 - 饲养动物损害"
-  },
-  {
-    "question": "遗产包括哪些范围？",
-    "expected_articles": [1122],
-    "note": "继承编 - 遗产范围"
-  },
-  {
-    "question": "没有遗嘱时，谁是第一顺序继承人？",
-    "expected_articles": [1127],
-    "note": "继承编 - 法定继承顺序"
-  },
-  {
-    "question": "赠与合同可以撤销吗？",
-    "expected_articles": [658, 663],
-    "note": "合同编 - 赠与撤销"
-  },
-  {
-    "question": "定金的数额有上限吗？超过部分如何处理？",
-    "expected_articles": [586, 587],
-    "note": "合同编 - 定金罚则"
-  },
-  {
-    "question": "民事主体从事民事活动应当遵循什么基本原则？",
-    "expected_articles": [4, 5, 6, 7],
-    "note": "总则 - 基本原则"
-  },
-  {
-    "question": "多少岁是完全民事行为能力人？",
-    "expected_articles": [17, 18],
-    "note": "总则 - 民事行为能力"
-  },
-  {
-    "question": "宣告失踪需要满足什么条件？",
-    "expected_articles": [40, 41],
-    "note": "总则 - 宣告失踪"
-  },
-  {
-    "question": "诉讼时效一般是多少年？",
-    "expected_articles": [188],
-    "note": "总则 - 诉讼时效"
-  },
-  {
-    "question": "自然人的人格权包括哪些？",
-    "expected_articles": [990, 991],
-    "note": "人格权编 - 人格权范围"
-  },
-  {
-    "question": "未经同意使用他人肖像构成侵权吗？",
-    "expected_articles": [1019, 1018],
-    "note": "人格权编 - 肖像权"
-  },
-  {
-    "question": "隐私权保护的内容有哪些？",
-    "expected_articles": [1032, 1033],
-    "note": "人格权编 - 隐私权"
-  },
-  {
-    "question": "无效合同的财产应当如何返还？",
-    "expected_articles": [157],
-    "note": "总则 - 民事法律行为无效后果"
-  },
-  {
-    "question": "相邻不动产之间用水排水有纠纷怎么办？",
-    "expected_articles": [290, 291],
-    "note": "物权编 - 相邻关系"
-  },
-  {
-    "question": "拾得遗失物应当怎么处理？",
-    "expected_articles": [314, 315, 316],
-    "note": "物权编 - 拾得遗失物"
-  },
-  {
-    "question": "好意同乘（搭便车）发生事故，驾驶人要全额赔偿吗？",
-    "expected_articles": [1217],
-    "note": "侵权责任编 - 好意同乘"
-  },
-  {
-    "question": "网络服务提供者对侵权信息有什么义务？",
-    "expected_articles": [1195, 1194, 1197],
-    "note": "侵权责任编 - 网络侵权"
-  },
-  {
-    "question": "格式条款提供方有哪些提示说明义务？",
-    "expected_articles": [496, 497],
-    "note": "合同编 - 格式条款"
-  },
-  {
-    "question": "债权人可以将合同的权利转让给第三人吗？",
-    "expected_articles": [545, 546],
-    "note": "合同编 - 债权转让"
-  }
+  {"question": "禁止家庭暴力，受害方可以采取什么措施？", "law": "中华人民共和国民法典", "expected_articles": [1042, 1091], "note": "民法典·婚姻家庭编 - 家庭暴力"},
+  {"question": "父母对成年子女还有抚养义务吗？", "law": "中华人民共和国民法典", "expected_articles": [1067], "note": "民法典·婚姻家庭编 - 抚养费"},
+  {"question": "夫妻一方擅自处分共同财产，另一方能否主张无效？", "law": "中华人民共和国民法典", "expected_articles": [1062, 1060], "note": "民法典·婚姻家庭编 - 夫妻共同财产"},
+  {"question": "协议离婚有冷静期吗？多长时间？", "law": "中华人民共和国民法典", "expected_articles": [1077, 1076], "note": "民法典·婚姻家庭编 - 离婚冷静期"},
+  {"question": "什么是居住权？如何设立？", "law": "中华人民共和国民法典", "expected_articles": [366, 367, 368], "note": "民法典·物权编 - 居住权"},
+  {"question": "因第三人原因造成他人损害，谁来承担责任？", "law": "中华人民共和国民法典", "expected_articles": [1165, 1175], "note": "民法典·侵权责任编 - 过错责任"},
+  {"question": "高空抛物致人损害怎么赔偿？", "law": "中华人民共和国民法典", "expected_articles": [1254], "note": "民法典·侵权责任编 - 高空抛物"},
+  {"question": "饲养的宠物咬伤他人，主人要赔偿吗？", "law": "中华人民共和国民法典", "expected_articles": [1245, 1246, 1247], "note": "民法典·侵权责任编 - 饲养动物损害"},
+  {"question": "见义勇为救助他人反而造成损害，要担责吗？", "law": "中华人民共和国民法典", "expected_articles": [184], "note": "民法典·总则 - 紧急救助免责"},
+  {"question": "从事高度危险作业造成他人损害如何担责？", "law": "中华人民共和国民法典", "expected_articles": [1236], "note": "民法典·侵权责任编 - 高度危险作业"},
+  {"question": "遗产包括哪些范围？", "law": "中华人民共和国民法典", "expected_articles": [1122], "note": "民法典·继承编 - 遗产范围"},
+  {"question": "没有遗嘱时，谁是第一顺序继承人？", "law": "中华人民共和国民法典", "expected_articles": [1127], "note": "民法典·继承编 - 法定继承顺序"},
+  {"question": "赠与合同可以撤销吗？", "law": "中华人民共和国民法典", "expected_articles": [658, 663], "note": "民法典·合同编 - 赠与撤销"},
+  {"question": "定金的数额有上限吗？超过部分如何处理？", "law": "中华人民共和国民法典", "expected_articles": [586, 587], "note": "民法典·合同编 - 定金罚则"},
+  {"question": "保证期间是什么？没约定怎么办？", "law": "中华人民共和国民法典", "expected_articles": [692], "note": "民法典·合同编 - 保证期间"},
+  {"question": "民事主体从事民事活动应当遵循什么基本原则？", "law": "中华人民共和国民法典", "expected_articles": [4, 5, 6, 7], "note": "民法典·总则 - 基本原则"},
+  {"question": "多少岁是完全民事行为能力人？", "law": "中华人民共和国民法典", "expected_articles": [17, 18], "note": "民法典·总则 - 民事行为能力"},
+  {"question": "宣告失踪需要满足什么条件？", "law": "中华人民共和国民法典", "expected_articles": [40, 41], "note": "民法典·总则 - 宣告失踪"},
+  {"question": "诉讼时效一般是多少年？", "law": "中华人民共和国民法典", "expected_articles": [188], "note": "民法典·总则 - 诉讼时效"},
+  {"question": "自然人的人格权包括哪些？", "law": "中华人民共和国民法典", "expected_articles": [990, 991], "note": "民法典·人格权编 - 人格权范围"},
+  {"question": "未经同意使用他人肖像构成侵权吗？", "law": "中华人民共和国民法典", "expected_articles": [1019, 1018], "note": "民法典·人格权编 - 肖像权"},
+  {"question": "隐私权保护的内容有哪些？", "law": "中华人民共和国民法典", "expected_articles": [1032, 1033], "note": "民法典·人格权编 - 隐私权"},
+  {"question": "无效合同的财产应当如何返还？", "law": "中华人民共和国民法典", "expected_articles": [157], "note": "民法典·总则 - 民事法律行为无效后果"},
+  {"question": "相邻不动产之间用水排水有纠纷怎么办？", "law": "中华人民共和国民法典", "expected_articles": [290, 291], "note": "民法典·物权编 - 相邻关系"},
+  {"question": "拾得遗失物应当怎么处理？", "law": "中华人民共和国民法典", "expected_articles": [314, 315, 316], "note": "民法典·物权编 - 拾得遗失物"},
+  {"question": "好意同乘（搭便车）发生事故，驾驶人要全额赔偿吗？", "law": "中华人民共和国民法典", "expected_articles": [1217], "note": "民法典·侵权责任编 - 好意同乘"},
+  {"question": "网络服务提供者对侵权信息有什么义务？", "law": "中华人民共和国民法典", "expected_articles": [1195, 1194, 1197], "note": "民法典·侵权责任编 - 网络侵权"},
+  {"question": "格式条款提供方有哪些提示说明义务？", "law": "中华人民共和国民法典", "expected_articles": [496, 497], "note": "民法典·合同编 - 格式条款"},
+  {"question": "债权人可以将合同的权利转让给第三人吗？", "law": "中华人民共和国民法典", "expected_articles": [545, 546], "note": "民法典·合同编 - 债权转让"},
+  {"question": "医务人员在诊疗中有哪些说明义务？", "law": "中华人民共和国民法典", "expected_articles": [1219], "note": "民法典·侵权责任编 - 医疗损害知情同意"},
+  {"question": "物业服务合同的内容是什么？", "law": "中华人民共和国民法典", "expected_articles": [937], "note": "民法典·合同编 - 物业服务"},
+
+  {"question": "面对正在发生的不法侵害，可以正当防卫吗？有什么限度？", "law": "中华人民共和国刑法", "expected_articles": [20], "note": "刑法 - 正当防卫"},
+  {"question": "故意伤害他人身体会受到什么刑事处罚？", "law": "中华人民共和国刑法", "expected_articles": [234], "note": "刑法 - 故意伤害罪"},
+  {"question": "故意杀人罪如何量刑？", "law": "中华人民共和国刑法", "expected_articles": [232], "note": "刑法 - 故意杀人罪"},
+  {"question": "醉酒驾驶机动车会构成什么犯罪？", "law": "中华人民共和国刑法", "expected_articles": [133], "note": "刑法 - 危险驾驶罪（第133条之一）"},
+  {"question": "盗窃公私财物达到什么程度构成犯罪？", "law": "中华人民共和国刑法", "expected_articles": [264], "note": "刑法 - 盗窃罪"},
+  {"question": "诈骗公私财物如何处罚？", "law": "中华人民共和国刑法", "expected_articles": [266], "note": "刑法 - 诈骗罪"},
+  {"question": "国家工作人员受贿如何认定和处罚？", "law": "中华人民共和国刑法", "expected_articles": [385], "note": "刑法 - 受贿罪"},
+  {"question": "什么是自首？自首可以从轻处罚吗？", "law": "中华人民共和国刑法", "expected_articles": [67], "note": "刑法 - 自首"},
+  {"question": "什么情况下构成累犯？", "law": "中华人民共和国刑法", "expected_articles": [65], "note": "刑法 - 累犯"},
+  {"question": "一人犯数罪如何并罚？", "law": "中华人民共和国刑法", "expected_articles": [69], "note": "刑法 - 数罪并罚"},
+  {"question": "缓刑适用于哪些情形？哪些人不适用缓刑？", "law": "中华人民共和国刑法", "expected_articles": [74], "note": "刑法 - 缓刑"},
+  {"question": "多大年龄开始负刑事责任？", "law": "中华人民共和国刑法", "expected_articles": [17], "note": "刑法 - 刑事责任年龄"},
+  {"question": "绑架他人勒索财物如何处罚？", "law": "中华人民共和国刑法", "expected_articles": [239], "note": "刑法 - 绑架罪"},
+
+  {"question": "刑事案件中什么情况下可以取保候审？", "law": "中华人民共和国刑事诉讼法", "expected_articles": [67], "note": "刑诉法 - 取保候审"},
+  {"question": "侦查、审判人员什么情况下应当回避？", "law": "中华人民共和国刑事诉讼法", "expected_articles": [29], "note": "刑诉法 - 回避"},
+  {"question": "犯罪嫌疑人从什么时候开始可以委托辩护人？", "law": "中华人民共和国刑事诉讼法", "expected_articles": [34, 33], "note": "刑诉法 - 辩护"},
+  {"question": "符合什么条件可以对嫌疑人逮捕或监视居住？", "law": "中华人民共和国刑事诉讼法", "expected_articles": [74], "note": "刑诉法 - 监视居住"},
+
+  {"question": "起诉一般向哪个法院提起，管辖如何确定？", "law": "中华人民共和国民事诉讼法", "expected_articles": [22], "note": "民诉法 - 一般地域管辖"},
+  {"question": "民事案件起诉需要符合哪些条件？", "law": "中华人民共和国民事诉讼法", "expected_articles": [122], "note": "民诉法 - 起诉条件"},
+  {"question": "审判人员在民事案件中什么情形要回避？", "law": "中华人民共和国民事诉讼法", "expected_articles": [47], "note": "民诉法 - 回避"},
+
+  {"question": "提起行政诉讼需要满足哪些条件？", "law": "中华人民共和国行政诉讼法", "expected_articles": [49], "note": "行政诉讼法 - 起诉条件"},
+  {"question": "对哪些行政行为可以提起行政诉讼？", "law": "中华人民共和国行政诉讼法", "expected_articles": [12], "note": "行政诉讼法 - 受案范围"},
+
+  {"question": "公司的定义是什么？包括哪些类型？", "law": "中华人民共和国公司法", "expected_articles": [2], "note": "公司法 - 公司类型"},
+  {"question": "有限责任公司的股东对公司债务承担什么责任？", "law": "中华人民共和国公司法", "expected_articles": [4, 3], "note": "公司法 - 股东有限责任"},
+  {"question": "公司股东会行使哪些职权？", "law": "中华人民共和国公司法", "expected_articles": [59], "note": "公司法 - 股东会职权"},
+  {"question": "公司章程对哪些主体有约束力？", "law": "中华人民共和国公司法", "expected_articles": [5], "note": "公司法 - 公司章程"},
+  {"question": "控股股东、董事不得利用关联关系损害公司利益吗？", "law": "中华人民共和国公司法", "expected_articles": [22], "note": "公司法 - 关联关系"},
+
+  {"question": "试用期最长可以约定多久？", "law": "中华人民共和国劳动合同法", "expected_articles": [19], "note": "劳动合同法 - 试用期期限"},
+  {"question": "劳动合同解除或终止时，经济补偿金如何计算？", "law": "中华人民共和国劳动合同法", "expected_articles": [47], "note": "劳动合同法 - 经济补偿"},
+  {"question": "用人单位违法解除劳动合同要赔偿吗？", "law": "中华人民共和国劳动合同法", "expected_articles": [87], "note": "劳动合同法 - 违法解除赔偿金"},
+
+  {"question": "国家规定的每日工作时间和每周工作时间是多少？", "law": "中华人民共和国劳动法", "expected_articles": [36], "note": "劳动法 - 工时制度"},
+  {"question": "最低工资保障制度由谁规定标准？", "law": "中华人民共和国劳动法", "expected_articles": [48], "note": "劳动法 - 最低工资"},
+
+  {"question": "我国的社会保险包括哪几种？", "law": "中华人民共和国社会保险法", "expected_articles": [2], "note": "社会保险法 - 险种"},
+  {"question": "职工基本养老保险费由谁缴纳？", "law": "中华人民共和国社会保险法", "expected_articles": [10], "note": "社会保险法 - 养老保险缴纳"},
+
+  {"question": "申请劳动争议仲裁的时效是多久？", "law": "中华人民共和国劳动争议调解仲裁法", "expected_articles": [27], "note": "劳动争议仲裁法 - 仲裁时效"},
+
+  {"question": "治安管理中殴打他人如何处罚？", "law": "中华人民共和国治安管理处罚法", "expected_articles": [43], "note": "治安处罚法 - 殴打他人"},
+  {"question": "盗窃、诈骗少量财物但不够刑事立案的如何处罚？", "law": "中华人民共和国治安管理处罚法", "expected_articles": [49], "note": "治安处罚法 - 侵财行为"},
+
+  {"question": "我国对机动车实行什么登记制度？", "law": "中华人民共和国道路交通安全法", "expected_articles": [8], "note": "道交法 - 机动车登记"},
+  {"question": "饮酒后能驾驶机动车吗？", "law": "中华人民共和国道路交通安全法", "expected_articles": [22], "note": "道交法 - 安全驾驶义务"},
+
+  {"question": "处理个人信息需要满足哪些合法性条件？", "law": "中华人民共和国个人信息保护法", "expected_articles": [13], "note": "个保法 - 合法处理条件"},
+  {"question": "什么是敏感个人信息？", "law": "中华人民共和国个人信息保护法", "expected_articles": [28], "note": "个保法 - 敏感个人信息"},
+  {"question": "处理敏感个人信息需要单独同意吗？", "law": "中华人民共和国个人信息保护法", "expected_articles": [29], "note": "个保法 - 敏感信息处理规则"},
+
+  {"question": "经营者提供商品有欺诈行为，消费者可以要求多少倍赔偿？", "law": "中华人民共和国消费者权益保护法", "expected_articles": [55], "note": "消法 - 惩罚性赔偿"},
+
+  {"question": "因不符合食品安全标准的食品受损，可以要求几倍赔偿？", "law": "中华人民共和国食品安全法", "expected_articles": [148], "note": "食安法 - 十倍赔偿"},
+  {"question": "从事食品生产经营需要取得许可吗？", "law": "中华人民共和国食品安全法", "expected_articles": [35], "note": "食安法 - 许可制度"},
+
+  {"question": "产品存在缺陷造成他人损害，生产者如何担责？", "law": "中华人民共和国产品质量法", "expected_articles": [41], "note": "产品质量法 - 缺陷产品责任"},
+
+  {"question": "广告可以含有虚假或引人误解的内容吗？", "law": "中华人民共和国广告法", "expected_articles": [4], "note": "广告法 - 虚假广告"},
+
+  {"question": "哪些行为属于滥用市场支配地位？", "law": "中华人民共和国反垄断法", "expected_articles": [22], "note": "反垄断法 - 滥用市场支配地位"},
+  {"question": "反垄断法规定的垄断行为包括哪些？", "law": "中华人民共和国反垄断法", "expected_articles": [3], "note": "反垄断法 - 垄断行为类型"},
+
+  {"question": "哪些行为属于侵犯商业秘密？", "law": "中华人民共和国反不正当竞争法", "expected_articles": [9], "note": "反不正当竞争法 - 商业秘密"},
+
+  {"question": "哪些个人所得需要缴纳个人所得税？", "law": "中华人民共和国个人所得税法", "expected_articles": [2], "note": "个税法 - 应税所得"},
+
+  {"question": "企业所得税的税率是多少？", "law": "中华人民共和国企业所得税法", "expected_articles": [4], "note": "企税法 - 税率"},
+
+  {"question": "增值税的纳税人范围是什么？", "law": "中华人民共和国增值税法", "expected_articles": [3], "note": "增值税法 - 纳税人"},
+
+  {"question": "纳税人未按期缴纳税款会产生滞纳金吗？", "law": "中华人民共和国税收征收管理法", "expected_articles": [32], "note": "税收征管法 - 滞纳金"},
+
+  {"question": "建筑工程开工前需要办理施工许可证吗？", "law": "中华人民共和国建筑法", "expected_articles": [7], "note": "建筑法 - 施工许可"},
+
+  {"question": "会计核算和会计监督由谁负责？", "law": "中华人民共和国会计法", "expected_articles": [5], "note": "会计法 - 会计监督"},
+
+  {"question": "设区的市可以制定地方性法规吗？", "law": "中华人民共和国立法法", "expected_articles": [81, 82], "note": "立法法 - 设区的市立法权"},
+
+  {"question": "监察机关的监察对象包括哪些人？", "law": "中华人民共和国监察法", "expected_articles": [11], "note": "监察法 - 监察职责"},
+
+  {"question": "行政机关侵犯人身权，受害人有取得国家赔偿的权利吗？", "law": "中华人民共和国国家赔偿法", "expected_articles": [3], "note": "国家赔偿法 - 行政赔偿范围"},
+
+  {"question": "申请领取居民身份证需要交验什么材料？", "law": "中华人民共和国居民身份证法", "expected_articles": [10], "note": "身份证法 - 申领"},
+
+  {"question": "政务处分的种类有哪些？", "law": "中华人民共和国公职人员政务处分法", "expected_articles": [7], "note": "政务处分法 - 处分种类"},
+
+  {"question": "法律上恐怖主义的定义是什么？", "law": "中华人民共和国反恐怖主义法", "expected_articles": [3], "note": "反恐法 - 恐怖主义定义"},
+
+  {"question": "法律上有组织犯罪指的是什么？", "law": "中华人民共和国反有组织犯罪法", "expected_articles": [2], "note": "反有组织犯罪法 - 定义"},
+
+  {"question": "担任法官需要具备哪些条件？", "law": "中华人民共和国法官法", "expected_articles": [12], "note": "法官法 - 任职条件"},
+  {"question": "担任检察官需要具备哪些条件？", "law": "中华人民共和国检察官法", "expected_articles": [12], "note": "检察官法 - 任职条件"},
+  {"question": "人民法院的性质和职能是什么？", "law": "中华人民共和国人民法院组织法", "expected_articles": [2], "note": "法院组织法 - 审判机关"},
+  {"question": "人民检察院是什么机关？", "law": "中华人民共和国人民检察院组织法", "expected_articles": [2], "note": "检察院组织法 - 法律监督机关"},
+  {"question": "哪些主体负有维护国家安全的义务？", "law": "中华人民共和国国家安全法", "expected_articles": [11], "note": "国家安全法 - 维护义务"},
+  {"question": "增值税的税率有哪几档？", "law": "中华人民共和国增值税法", "expected_articles": [10], "note": "增值税法 - 税率"}
 ]

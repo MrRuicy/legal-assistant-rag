@@ -11,8 +11,15 @@ venv/
 
 # 向量库与解析数据：随仓库提交以支持创空间部署（冷启动免重建、不耗 embedding 配额）
 # 如需保持仓库精简，可重新忽略并改为启动时构建（见 app.py 的 _ensure_vector_store）
+# 接入更多法律会增大向量库；setup 末尾有体积护栏提示（VECTOR_STORE_WARN_MB）。
 # vector_store/
 # data/processed/
+
+# query embedding 缓存（运行时本地生成，不入库）
+vector_store/_query_cache/
+
+# LawRefBook/Laws 法律源仓库：本地克隆用于 setup 解析，体量大，不随本仓库提交
+Laws/
 
 # IDE
 .vscode/

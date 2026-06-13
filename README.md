@@ -1,17 +1,19 @@
-# 民法典法律助手 RAG 系统
+# 中国法律助手 RAG 系统
 
-基于 RAG（检索增强生成）的《中华人民共和国民法典》智能问答系统。
+基于 RAG（检索增强生成）的中国法律法规智能问答系统。内置《中华人民共和国民法典》并精选接入刑法、公司法、劳动法、消费者权益保护法等 38 部常用法律法规，可继续扩充。
 
 ## 特性
 
+- ✅ **多法律覆盖**：民法典 + 精选刑事/商事/劳动/行政/诉讼等 38 部法律（约 5200 条），可按目录继续扩充
 - ✅ **混合检索**：向量召回 + BM25 关键词召回，加权 RRF 融合，兼顾语义与法律术语精确匹配
-- ✅ **引用校验**：自动核对回答引用的条号是否来自检索结果，醒目徽章标注（通过/告警），降低幻觉风险
-- ✅ **准确引用**：答案强制引用具体条文（《民法典》第X条）
+- ✅ **跨法律引用校验**：按「《法律名》第X条」核对引用，杜绝把甲法条号安到乙法上，醒目徽章标注
+- ✅ **准确引用**：答案强制写明法律名与条号（《中华人民共和国公司法》第X条）
 - ✅ **多轮对话**：支持追问，自动改写依赖上下文的问题（如"有无例外"→"诉讼时效的例外"）再检索
 - ✅ **流式输出**：回答逐字呈现，无需等待整段生成
-- ✅ **多模型故障转移**：某模型配额超限（429）时按优先级自动切换下一个模型，用户无感知
+- ✅ **异构故障转移**：模型配额超限（429）时按优先级自动切换下一档，末档可挂任意供应商真正兜底
+- ✅ **Query embedding 缓存**：相同问题的 query 向量本地缓存，省 embedding 配额、降首字延迟
 - ✅ **相关性闸门**：距离阈值拦截无关问题（如天气、菜谱），返回"未找到相关条文"
-- ✅ **检索评估集**：内置 25 题评估集与脚本（`eval/`），量化每次优化的 Recall/Hit/MRR
+- ✅ **双重评估集**：检索评估（Recall/Hit/MRR）+ 答案质量评估（LLM-as-judge 四维打分）
 - ✅ **可切换 Embedding**：支持 ModelScope API 和 SiliconFlow API 两种供应商
 - ✅ **本地向量库**：ChromaDB 本地持久化，无需额外服务器
 - ✅ **合规设计**：内置免责声明，明确不构成法律建议
@@ -42,9 +44,10 @@ cp .env.example .env
 MODELSCOPE_API_KEY=your_modelscope_token_here
 LLM_MODEL=deepseek-ai/DeepSeek-V3.2
 
-# 模型故障转移链（可选，逗号分隔）：首选模型配额超限时按序自动切换
-# 留空则用内置默认链。ModelScope 免费配额按模型分别计算（每模型约 20 次/天）
-# LLM_FALLBACK_MODELS=Qwen/Qwen3-235B-A22B-Instruct-2507,ZhipuAI/GLM-5
+# 模型故障转移链（可选）：首选模型配额超限时按序自动切换。
+# 每档可以是「纯模型名」（继承主供应商 key/base_url），也可以是「模型|key|base_url」
+# 自带 API 的完整档位——把异构供应商放最后一档即可真正兜底，避免同一家全部 429 一起熄火。
+# LLM_FALLBACK_MODELS=ZhipuAI/GLM-5,deepseek-chat|sk-xxxx|https://api.deepseek.com/v1
 
 # Embedding 供应商选择（推荐 siliconflow，ModelScope 免费额度较严）
 EMBEDDING_PROVIDER=siliconflow
@@ -64,9 +67,12 @@ python main.py setup
 ```
 
 这会：
-1. 解析 `data/raw/` 下的民法典 markdown 文件
-2. 生成统一的 JSON 数据（`data/processed/civil_code.json`）
+1. 解析法律文本：民法典（`data/raw/`）+ 精选目录（`src/law_catalog.py` 里在本地 `Laws/` 能找到的法律）
+2. 生成统一的 JSON 数据（`data/processed/civil_code.json`，含全部已接入法律）
 3. 调用 embedding API 构建向量库（存储在 `vector_store/`）
+4. 末尾打印向量库体积，超过 `VECTOR_STORE_WARN_MB`（默认 150MB）时提示
+
+> 想接入更多法律，需先把 [LawRefBook/Laws](https://github.com/LawRefBook/Laws) 克隆到项目根的 `Laws/` 目录（该目录不随本仓库提交）。仅接入民法典时无需 `Laws/`，`data/raw/` 已自带。
 
 ### 4. 启动 Web 服务
 
@@ -81,21 +87,28 @@ python main.py serve
 ```
 legal-assistant-rag/
 ├── data/
-│   ├── raw/           # 民法典原始 markdown（从 LawRefBook 下载）
-│   └── processed/     # 解析后的统一 JSON
+│   ├── raw/           # 民法典原始 markdown（从 LawRefBook 下载，按编拆分）
+│   └── processed/     # 解析后的统一 JSON（含全部已接入法律）
+├── Laws/              # LawRefBook/Laws 源仓库（本地克隆，不提交；接入多法律时需要）
 ├── src/
-│   ├── config.py        # 配置管理（API key、模型优先级链、检索参数）
-│   ├── parser.py        # Markdown 解析器（按条切分 + 通用 schema）
-│   ├── embedding.py     # 可切换的 embedding 客户端（ModelScope/SiliconFlow）
-│   ├── bm25_retriever.py  # BM25 关键词检索（jieba 分词，内存索引）
+│   ├── config.py        # 配置管理（API key、异构故障转移链、检索参数、品牌文案）
+│   ├── law_catalog.py   # 精选法律目录（定义接入哪些法律，加一行即可扩充）
+│   ├── parser.py        # 通用 LawRefBook 解析器（任意法律、多段条文、第X条之一）
+│   ├── embedding.py     # 可切换的 embedding 客户端（ModelScope/SiliconFlow）+ query 缓存
+│   ├── embed_cache.py   # query embedding 磁盘 LRU 缓存
+│   ├── bm25_retriever.py  # BM25 关键词检索（jieba 分词，分词语料磁盘缓存）
 │   ├── reranker.py      # rerank 精排客户端（可选，默认关闭）
-│   ├── vector_store.py  # 向量库 + 混合检索 + RRF 融合 + 距离闸门
-│   ├── rag.py           # RAG 问答链（检索 + 改写 + 故障转移 + 引用校验）
+│   ├── vector_store.py  # 向量库 + 混合检索 + RRF 融合 + 距离闸门（跨法律唯一 ID）
+│   ├── rag.py           # RAG 问答链（检索 + 改写 + 异构故障转移 + 跨法律引用校验）
 │   └── web.py           # Gradio Web 界面（流式 + 多轮）
 ├── eval/
-│   ├── eval_set.json    # 检索评估集（25 题，覆盖 7 编）
-│   └── evaluate.py      # 评估脚本（Recall@K / Hit@K / MRR）
-├── main.py            # 主入口（setup / serve）
+│   ├── eval_set.json    # 检索评估集（100 题，覆盖 37 部法律）
+│   ├── evaluate.py      # 检索评估脚本（Recall@K / Hit@K / MRR）
+│   ├── answer_set.json  # 答案质量评估集（覆盖多部法律 + 负样本）
+│   └── eval_answer.py   # 答案质量评估脚本（LLM-as-judge 四维打分）
+├── vector_store/      # 预构建向量库 + BM25 缓存（随仓库提交，供创空间免冷启动）
+├── main.py            # 本地入口（setup / serve）
+├── app.py             # 创空间入口（0.0.0.0:7860 + 向量库缺失兜底构建）
 ├── requirements.txt
 ├── .env.example       # 配置模板
 └── README.md
@@ -114,9 +127,9 @@ legal-assistant-rag/
     ↓
 3. 构造 Prompt（Top-K 条文 + 问题 + 强制引用指令）+ 历史对话
     ↓
-4. LLM 流式生成（模型配额超限自动故障转移）
+4. LLM 流式生成（配额超限自动故障转移，末档可挂异构供应商兜底）
     ↓
-5. 引用校验：核对引用条号是否都在检索结果中
+5. 引用校验：按「《法律名》第X条」核对引用是否都在检索结果中（跨法律不串号）
     ↓
 6. 返回（流式答案 + 引用条文 + 校验徽章 + 免责声明）
 ```
@@ -124,29 +137,32 @@ legal-assistant-rag/
 **数据流通用 Schema：**
 ```python
 LawArticle {
-  law_name: "中华人民共和国民法典"
-  part: "总则"
-  chapter: "第一章 基本规定"
+  law_name: "中华人民共和国公司法"
+  part: ""                  # 编（仅民法典等少数法律有）
+  chapter: "第一章 总则"
   section: ""
-  article_no: 1
-  article_text: "为了保护民事主体的合法权益..."
-  effective_date: "2021-01-01"
+  article_no: 133           # 条号
+  sub_no: 1                 # "第X条之一"→1，普通条为 0；保证条号唯一不被覆盖
+  article_text: "在道路上驾驶机动车..."
+  effective_date: "2024-07-01"
 }
 ```
 
 ## 技术栈
 
-- **数据源**：[LawRefBook/Laws](https://github.com/LawRefBook/Laws) 民法典 markdown
-- **Embedding**：SiliconFlow API（推荐，bge-m3）/ ModelScope API（备选）
-- **关键词检索**：jieba 分词 + rank_bm25（BM25Okapi）
+- **数据源**：[LawRefBook/Laws](https://github.com/LawRefBook/Laws) 法律 markdown（通用解析器）
+- **Embedding**：SiliconFlow API（推荐，bge-m3）/ ModelScope API（备选）+ query 磁盘缓存
+- **关键词检索**：jieba 分词 + rank_bm25（BM25Okapi），分词语料磁盘缓存
 - **向量库**：ChromaDB（本地文件型）
 - **检索融合**：加权 Reciprocal Rank Fusion（RRF）
-- **LLM**：ModelScope API（DeepSeek-V3.2 / Qwen3 / GLM-5 等中文模型，支持多模型故障转移）
+- **LLM**：ModelScope API（DeepSeek-V3.2 / Qwen3 / GLM-5 等中文模型，支持跨供应商异构故障转移）
 - **Web 框架**：Gradio
 
-## 检索评估
+## 评估
 
-内置评估集量化检索质量，每次调参后可对比效果：
+### 检索评估（Recall / Hit / MRR）
+
+量化检索质量，每次调参后可对比效果：
 
 ```bash
 python -m eval.evaluate            # 用默认 Top-K
@@ -158,30 +174,53 @@ python -m eval.evaluate --top-k 10
 - **Hit@K**：至少命中一条期望条文的题目比例
 - **MRR**：首个命中条文排名的倒数（衡量命中条文是否靠前）
 
-当前混合检索在 25 题评估集上：Recall@8 ≈ 0.90，Hit@8 ≈ 0.96。
+当前混合检索在 100 题评估集（覆盖 37 部法律）上：Recall@8 ≈ 0.975，Hit@8 = 1.000，MRR ≈ 0.866。
 
-## 扩展其他法律
+### 答案质量评估（LLM-as-judge）
 
-当前只接入民法典。要添加其他法律（刑法、公司法等）：
+检索好不等于答得好。答案评估跑完整 RAG，再用裁判模型按四个维度打分（1~5）：
+准确性 / 忠于检索 / 引用规范 / 表达清晰，并含一道无关问题负样本（考察是否正确拒答）。
 
-1. 下载对应的 markdown 文件到 `data/raw/`
-2. 在 `parser.py` 中添加对应的解析函数（或复用 `parse_civil_code_markdown`，如果格式相同）
-3. 修改 `parse_all_civil_code` 或新增函数合并多部法律
-4. 重新运行 `python main.py setup`
+```bash
+python -m eval.eval_answer                 # 评估全部题目
+python -m eval.eval_answer --limit 3       # 只评前 3 题（省配额）
+python -m eval.eval_answer --save out.json # 同时落盘逐题明细
+```
 
-**数据结构已通用化**（`law_name` 字段区分不同法律），检索/RAG/Web 模块无需改动。
+> 答案评估每题至少 2 次 LLM 调用（生成 + 裁判），注意配额。
+
+## 扩展更多法律
+
+解析器已通用化，新增一部 LawRefBook 法律**无需改代码**：
+
+1. 把 [LawRefBook/Laws](https://github.com/LawRefBook/Laws) 克隆到项目根的 `Laws/` 目录
+2. 在 [src/law_catalog.py](src/law_catalog.py) 的 `LAW_CATALOG` 加一行：`("分类/法律名(日期).md", "生效日期")`
+3. 重新运行 `python main.py setup`
+
+解析器会自动识别法律名（取文件首个 `# 标题`）、跳过 `<!-- INFO END -->` 元信息、正确处理多段条文与「第X条之一」。条文 ID 以 `(法律名, 条号, 之N)` 组合保证跨法律唯一，引用校验也按法律名区分，互不串号。
+
+**注意接入范围**：精选目录刻意只含高频「法律」正文，未含司法解释 / 案例 / 地方法规——它们体量大、格式各异，会显著抬高 embedding 成本与向量库体积。接入越多，向量库越大（setup 末尾有体积护栏提示）。
 
 ## 部署到 ModelScope 创空间
 
-1. 在 [ModelScope 创空间](https://modelscope.cn/studios) 创建新应用
-2. 上传整个项目
-3. 设置启动命令：`python main.py serve`
-4. 在创空间环境变量中配置 `.env` 的密钥
-5. 发布即可获得永久公网 URL
+本项目已为创空间部署做了适配：入口是 [app.py](app.py)（创空间默认运行它），绑定 `0.0.0.0:7860` 对外提供服务。**预构建向量库（`vector_store/`）和解析后的 JSON（`data/processed/`）已随仓库提交**，因此创空间冷启动无需重建索引，也不消耗 embedding 配额；万一向量库缺失，`app.py` 会现场兜底构建。
+
+部署步骤：
+
+1. 在 [ModelScope 创空间](https://modelscope.cn/studios) 创建新应用（SDK 选 Gradio）
+2. 将本仓库推送 / 上传到创空间 Git（确保 `vector_store/` 一并提交）
+3. 在创空间「环境变量」中配置密钥（**不要把 `.env` 提交到仓库**）：
+   - `MODELSCOPE_API_KEY` —— LLM 生成
+   - `SILICONFLOW_API_KEY` —— 每次提问的 query embedding
+   - `EMBEDDING_PROVIDER=siliconflow`
+   - 可选：`LLM_MODEL` / `LLM_FALLBACK_MODELS`
+4. 创空间会自动运行 `app.py`，发布后即可获得永久公网 URL
+
+> 说明：query embedding 在每次提问时仍需调用 embedding API，因此 `SILICONFLOW_API_KEY` 必须配置；只有「构建向量库」这一步被预提交的索引省掉了。
 
 ## 注意事项
 
-- **法律时效性**：本系统基于民法典 2021 年版本，不包含后续司法解释
+- **法律时效性**：各部法律以接入时 LawRefBook 收录的版本为准（见 `effective_date`），不含后续修正与司法解释；以官方最新公布文本为准
 - **免责声明**：所有答案仅供参考，不构成法律建议
 - **API 限额**：免费 API 有调用次数限制，生产环境建议升级付费或本地部署模型
 - **数据准确性**：虽已尽力确保，但法律条文解析可能存在误差，使用前请核对原文

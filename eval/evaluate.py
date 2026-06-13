@@ -22,6 +22,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.vector_store import VectorStore
 
 EVAL_SET_PATH = Path(__file__).resolve().parent / "eval_set.json"
+DEFAULT_LAW = "中华人民共和国民法典"  # 旧条目缺少 law 字段时的回退
+
+
+def _label(law: str, no: int) -> str:
+    short = law.replace("中华人民共和国", "")
+    return f"{short}#{no}"
 
 
 def evaluate(top_k: int):
@@ -37,10 +43,11 @@ def evaluate(top_k: int):
 
     for case in eval_set:
         question = case["question"]
-        expected = set(case["expected_articles"])
+        law = case.get("law", DEFAULT_LAW)
+        expected = {(law, no) for no in case["expected_articles"]}
 
         hits = vs.search(question, top_k=top_k)
-        retrieved = [h["article_no"] for h in hits]
+        retrieved = [(h.get("law_name", ""), h["article_no"]) for h in hits]
         retrieved_set = set(retrieved)
 
         # Recall@K
@@ -49,23 +56,25 @@ def evaluate(top_k: int):
         total_recall += recall
 
         # Hit@K
-        hit = 1 if matched else 0
-        total_hit += hit
+        total_hit += 1 if matched else 0
 
         # MRR：第一个命中期望条文的排名
         rr = 0.0
-        for rank, art_no in enumerate(retrieved, 1):
-            if art_no in expected:
+        for rank, pair in enumerate(retrieved, 1):
+            if pair in expected:
                 rr = 1.0 / rank
                 break
         total_rr += rr
 
         if recall < 1.0:
+            exp_labels = sorted(_label(law, n) for _, n in expected)
+            ret_labels = [_label(l, n) for l, n in retrieved]
+            missed_labels = sorted(_label(law, n) for law, n in (expected - retrieved_set))
             misses.append({
                 "question": question,
-                "expected": sorted(expected),
-                "retrieved": retrieved,
-                "missed": sorted(expected - retrieved_set),
+                "expected": exp_labels,
+                "retrieved": ret_labels,
+                "missed": missed_labels,
                 "note": case.get("note", ""),
             })
 

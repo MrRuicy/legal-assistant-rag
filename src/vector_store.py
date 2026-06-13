@@ -15,6 +15,17 @@ from .bm25_retriever import BM25Retriever
 from .parser import LawArticle
 
 
+def _article_id(law_name: str, article_no: int, sub_no: int = 0) -> str:
+    """跨法律唯一的条文 ID。sub_no 区分"第X条之一/之二"，避免互相覆盖。"""
+    suffix = f"_{sub_no}" if sub_no else ""
+    return f"{law_name}#{article_no}{suffix}"
+
+
+def _article_key(hit: Dict):
+    """合并/去重用的组合键：(法律名, 条号, 附加条序号)。兼容缺字段的旧数据。"""
+    return (hit.get("law_name", ""), hit["article_no"], hit.get("sub_no", 0))
+
+
 class VectorStore:
     def __init__(self):
         self.embed_client = EmbeddingClient()
@@ -39,10 +50,14 @@ class VectorStore:
 
         ids, texts, metadatas = [], [], []
         for i, art in enumerate(articles):
-            # ID: 唯一标识，格式 "law_part_articleNo"
-            ids.append(f"civil_{art.article_no}")
-            # 文本：用于 embedding（包含层级信息增强语义）
-            texts.append(f"{art.part} {art.chapter} {art.section} 第{art.article_no}条 {art.article_text}")
+            # ID：跨法律唯一。仅用 article_no 会冲突（每部法律都有"第一条"，
+            # 同一法律还有"第X条之一"），故以 (law_name, article_no, sub_no) 组合作键。
+            ids.append(_article_id(art.law_name, art.article_no, art.sub_no))
+            # 文本：用于 embedding（含法律名 + 层级信息增强语义、消除跨法律歧义）
+            texts.append(
+                f"{art.law_name} {art.part} {art.chapter} {art.section} "
+                f"{art.article_label} {art.article_text}"
+            )
             # Metadata：存储结构化信息（检索时返回）
             metadatas.append({
                 "law_name": art.law_name,
@@ -50,7 +65,9 @@ class VectorStore:
                 "chapter": art.chapter,
                 "section": art.section,
                 "article_no": art.article_no,
+                "sub_no": art.sub_no,
                 "article_text": art.article_text,
+                "effective_date": art.effective_date,
             })
 
         # 分批 embed + 入库
@@ -124,17 +141,17 @@ class VectorStore:
         vec_hits = self._vector_search(query, n)
         bm25_hits = self.bm25.search(query, n)
 
-        # 以 article_no 为键合并两路；保留各自的分数字段便于调试/展示
-        merged: Dict[int, Dict] = {}
-        rrf: Dict[int, float] = {}
+        # 以 (law_name, article_no) 为键合并两路；保留各自分数字段便于调试/展示
+        merged: Dict[tuple, Dict] = {}
+        rrf: Dict[tuple, float] = {}
 
         for rank, h in enumerate(vec_hits):
-            key = h["article_no"]
+            key = _article_key(h)
             merged.setdefault(key, h)
             rrf[key] = rrf.get(key, 0.0) + config.HYBRID_VECTOR_WEIGHT / (config.RRF_K + rank)
 
         for rank, h in enumerate(bm25_hits):
-            key = h["article_no"]
+            key = _article_key(h)
             if key in merged:
                 merged[key]["bm25_score"] = h.get("bm25_score")
             else:
@@ -142,7 +159,7 @@ class VectorStore:
             rrf[key] = rrf.get(key, 0.0) + config.HYBRID_BM25_WEIGHT / (config.RRF_K + rank)
 
         # 按 RRF 分数降序
-        ordered = sorted(merged.values(), key=lambda h: rrf[h["article_no"]], reverse=True)
+        ordered = sorted(merged.values(), key=lambda h: rrf[_article_key(h)], reverse=True)
         for h in ordered:
             h.setdefault("distance", None)
             h.setdefault("bm25_score", None)
@@ -162,11 +179,13 @@ class VectorStore:
             meta = results['metadatas'][0][i]
             hits.append({
                 "article_no": meta['article_no'],
+                "sub_no": meta.get('sub_no', 0),
                 "law_name": meta['law_name'],
                 "part": meta['part'],
                 "chapter": meta['chapter'],
                 "section": meta['section'],
                 "article_text": meta['article_text'],
+                "effective_date": meta.get('effective_date', ''),
                 "distance": results['distances'][0][i] if 'distances' in results else None,
                 "rerank_score": None,
             })
@@ -181,7 +200,7 @@ class VectorStore:
         rerank 失败时降级为原向量顺序，保证可用性。
         """
         docs = [
-            f"《民法典》第{c['article_no']}条 {c['article_text']}"
+            f"《{c.get('law_name','')}》第{c['article_no']}条 {c['article_text']}"
             for c in candidates
         ]
         try:

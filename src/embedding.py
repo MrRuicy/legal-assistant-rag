@@ -8,6 +8,7 @@ from typing import List
 from openai import OpenAI
 
 from . import config
+from .embed_cache import QueryEmbedCache
 
 
 class EmbeddingClient:
@@ -20,9 +21,13 @@ class EmbeddingClient:
                 f"embedding 供应商 {self.provider} 缺少 API key，请在 .env 中配置。"
             )
         self.client = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"])
+        self._cache = QueryEmbedCache()
 
     def embed(self, texts: List[str], batch_size: int = 16) -> List[List[float]]:
-        """对一批文本求向量。自动分批，避免单次请求过大。"""
+        """对一批文本求向量。自动分批，避免单次请求过大。
+
+        批量构建向量库不走 query 缓存（一次性、文本各异），只有 embed_query 走缓存。
+        """
         if isinstance(texts, str):
             texts = [texts]
         vectors: List[List[float]] = []
@@ -35,4 +40,10 @@ class EmbeddingClient:
         return vectors
 
     def embed_query(self, text: str) -> List[float]:
-        return self.embed([text])[0]
+        """对单条 query 求向量，带磁盘缓存（命中则零 API 调用）。"""
+        cached = self._cache.get(self.provider, self.model, text)
+        if cached is not None:
+            return cached
+        vec = self.embed([text])[0]
+        self._cache.set(self.provider, self.model, text, vec)
+        return vec

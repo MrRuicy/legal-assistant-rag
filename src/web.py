@@ -1,6 +1,7 @@
 """Gradio Web 界面（多轮对话 + 流式输出 + 引用校验）。"""
 import gradio as gr
 
+from . import config
 from .rag import LegalRAG
 
 # 自定义 CSS：整体适配浏览器视口，尽量一页不翻页
@@ -42,8 +43,9 @@ def _format_refs(hits) -> str:
         return "_暂无检索结果_"
     lines = [f"**本次检索到 {len(hits)} 条相关条文：**\n"]
     for h in hits:
+        law = h.get("law_name", "")
         lines.append(
-            f"- **第{h['article_no']}条**（{h['part']} {h['chapter']}）\n"
+            f"- **《{law}》第{h['article_no']}条**（{h['part']} {h['chapter']}）\n"
             f"  {h['article_text']}\n"
         )
     return "\n".join(lines)
@@ -99,11 +101,11 @@ def create_app():
                 yield history, _format_refs(refs_hits), ""
                 return
 
-    with gr.Blocks(title="民法典法律助手") as demo:
+    with gr.Blocks(title=config.APP_TITLE) as demo:
         with gr.Column(elem_id="app-header"):
             gr.HTML(
-                "<h1>⚖️ 民法典法律助手</h1>"
-                "<p>基于 RAG 的《中华人民共和国民法典》智能问答 · 支持多轮对话与条文引用校验</p>"
+                f"<h1>⚖️ {config.APP_TITLE}</h1>"
+                f"<p>{config.APP_SUBTITLE}</p>"
             )
 
         with gr.Row(equal_height=True):
