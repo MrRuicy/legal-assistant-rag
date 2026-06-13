@@ -92,6 +92,12 @@ SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY", "")
 SILICONFLOW_BASE_URL = os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1")
 SILICONFLOW_EMBED_MODEL = os.getenv("SILICONFLOW_EMBED_MODEL", "BAAI/bge-m3")
 
+# ---- 用户反馈日志 ----
+# 用户对回答的 👍/👎 反馈落到本地 JSONL，攒成难例集后可回灌评估集。
+# 每行一条：{ts, question, rewrite, liked, answer, refs:[{law,no}], verify_status}
+FEEDBACK_LOG_ENABLED = os.getenv("FEEDBACK_LOG_ENABLED", "true").lower() == "true"
+FEEDBACK_LOG_PATH = ROOT_DIR / "data" / "feedback.jsonl"
+
 # ---- Query embedding 缓存 ----
 # 每次提问都要对 query 求一次 embedding（消耗供应商配额、增加延迟）。
 # 相同/重复问题很常见，故对 query 向量做磁盘缓存（key = provider+model+文本）。
