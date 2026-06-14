@@ -1,4 +1,4 @@
-"""Query embedding 磁盘缓存（item 1：省 embedding 配额、降延迟）。
+"""Query embedding 磁盘缓存：省 embedding 配额、降首字延迟。
 
 每次提问都要对 query 求一次 embedding，消耗供应商配额并增加首字延迟。
 相同/重复问题很常见，故把 query 向量缓存到磁盘：

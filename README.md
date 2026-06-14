@@ -1,10 +1,10 @@
 # 中国法律助手 RAG 系统
 
-基于 RAG（检索增强生成）的中国法律法规智能问答系统。内置《中华人民共和国民法典》并精选接入刑法、公司法、劳动法、消费者权益保护法等 38 部常用法律法规，可继续扩充。
+基于 RAG（检索增强生成）的中国法律法规智能问答系统。内置《中华人民共和国民法典》并精选接入刑法、公司法、劳动法、消费者权益保护法等 38 部常用法律法规（合计 5165 条），可继续扩充。
 
 ## 特性
 
-- ✅ **多法律覆盖**：民法典 + 精选刑事/商事/劳动/行政/诉讼等 38 部法律（约 5200 条），可按目录继续扩充
+- ✅ **多法律覆盖**：民法典 + 精选刑事/商事/劳动/行政/诉讼等 38 部法律（5165 条），可按目录继续扩充
 - ✅ **混合检索**：向量召回 + BM25 关键词召回，加权 RRF 融合，兼顾语义与法律术语精确匹配
 - ✅ **跨法律引用校验**：按「《法律名》第X条」核对引用，杜绝把甲法条号安到乙法上，醒目徽章标注
 - ✅ **准确引用**：答案强制写明法律名与条号（《中华人民共和国公司法》第X条）
@@ -13,6 +13,7 @@
 - ✅ **异构故障转移**：模型配额超限（429）时按优先级自动切换下一档，末档可挂任意供应商真正兜底
 - ✅ **Query embedding 缓存**：相同问题的 query 向量本地缓存，省 embedding 配额、降首字延迟
 - ✅ **相关性闸门**：距离阈值拦截无关问题（如天气、菜谱），返回"未找到相关条文"
+- ✅ **反馈难例闭环**：内置 👍/👎 反馈按钮，落盘到 `data/feedback.jsonl`，可作难例集回灌评估
 - ✅ **双重评估集**：检索评估（Recall/Hit/MRR）+ 答案质量评估（LLM-as-judge 四维打分）
 - ✅ **可切换 Embedding**：支持 ModelScope API 和 SiliconFlow API 两种供应商
 - ✅ **本地向量库**：ChromaDB 本地持久化，无需额外服务器
@@ -87,9 +88,10 @@ python main.py serve
 ```
 legal-assistant-rag/
 ├── data/
-│   ├── raw/           # 民法典原始 markdown（从 LawRefBook 下载，按编拆分）
-│   └── processed/     # 解析后的统一 JSON（含全部已接入法律）
-├── Laws/              # LawRefBook/Laws 源仓库（本地克隆，不提交；接入多法律时需要）
+│   ├── raw/              # 民法典原始 markdown（从 LawRefBook 下载，按编拆分）
+│   ├── processed/        # 解析后的统一 JSON（含全部已接入法律）
+│   └── feedback.jsonl    # 用户 👍/👎 反馈日志（运行时生成，攒难例集用）
+├── Laws/                 # LawRefBook/Laws 源仓库（本地克隆，不提交；接入多法律时需要）
 ├── src/
 │   ├── config.py        # 配置管理（API key、异构故障转移链、检索参数、品牌文案）
 │   ├── law_catalog.py   # 精选法律目录（定义接入哪些法律，加一行即可扩充）
@@ -100,17 +102,18 @@ legal-assistant-rag/
 │   ├── reranker.py      # rerank 精排客户端（可选，默认关闭）
 │   ├── vector_store.py  # 向量库 + 混合检索 + RRF 融合 + 距离闸门（跨法律唯一 ID）
 │   ├── rag.py           # RAG 问答链（检索 + 改写 + 异构故障转移 + 跨法律引用校验）
-│   └── web.py           # Gradio Web 界面（流式 + 多轮）
+│   └── web.py           # Gradio Web 界面（流式 + 多轮 + 反馈）
 ├── eval/
 │   ├── eval_set.json    # 检索评估集（100 题，覆盖 37 部法律）
 │   ├── evaluate.py      # 检索评估脚本（Recall@K / Hit@K / MRR）
 │   ├── answer_set.json  # 答案质量评估集（覆盖多部法律 + 负样本）
 │   └── eval_answer.py   # 答案质量评估脚本（LLM-as-judge 四维打分）
-├── vector_store/      # 预构建向量库 + BM25 缓存（随仓库提交，供创空间免冷启动）
-├── main.py            # 本地入口（setup / serve）
-├── app.py             # 创空间入口（0.0.0.0:7860 + 向量库缺失兜底构建）
+├── vector_store/        # 预构建向量库 + BM25 缓存（随仓库提交，供创空间免冷启动）
+│   └── _query_cache/    # query embedding 磁盘缓存（运行时生成，不入库）
+├── main.py              # 本地入口（setup / serve）
+├── app.py               # 创空间入口（0.0.0.0:7860 + 向量库缺失兜底构建）
 ├── requirements.txt
-├── .env.example       # 配置模板
+├── .env.example         # 配置模板
 └── README.md
 ```
 
@@ -188,6 +191,14 @@ python -m eval.eval_answer --save out.json # 同时落盘逐题明细
 ```
 
 > 答案评估每题至少 2 次 LLM 调用（生成 + 裁判），注意配额。
+
+### 反馈难例闭环
+
+每条 AI 回答下方都有 👍/👎 按钮，点击会把当前问题、改写后的查询、引用条文、引用校验状态等
+追加到 `data/feedback.jsonl`（每行一条 JSON）。攒一段时间后，可把"👎"或"引用校验告警"的题目
+挑出来回灌进 `eval/eval_set.json` / `answer_set.json`，定向修补检索/生成质量。
+
+可在 `.env` 设 `FEEDBACK_LOG_ENABLED=false` 关闭。
 
 ## 扩展更多法律
 

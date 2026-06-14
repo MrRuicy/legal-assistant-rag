@@ -38,7 +38,6 @@ class LawArticle:
 
 
 # 条文起始行：第X条 / 第X条之一（X 支持中文或阿拉伯数字），其后须接空白
-_ARTICLE_RE = re.compile(r'^第([一二三四五六七八九十百千零\d]+)条(之[一二三四五六七八九十]+)?[\s　]')
 _ARTICLE_HEAD_RE = re.compile(r'^第([一二三四五六七八九十百千零\d]+)条(之[一二三四五六七八九十]+)?[\s　]+(.*)$')
 
 
@@ -173,10 +172,10 @@ def chinese_to_arabic(cn: str) -> int:
     return result + tmp
 
 
-# ---- 民法典专用包装（向后兼容旧调用）----
+# ---- 民法典专用包装（按编拆分的多文件目录，整体接入）----
 
 def parse_civil_code_markdown(md_path: Path) -> List[LawArticle]:
-    """解析民法典单个 markdown（按编拆分的文件之一）。"""
+    """解析民法典单个 markdown（按编拆分的文件之一），固定 law_name 与生效日期。"""
     return parse_law_markdown(
         md_path,
         law_name="中华人民共和国民法典",

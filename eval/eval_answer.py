@@ -1,7 +1,7 @@
-"""答案质量评估（item 2：LLM-as-judge）。
+"""答案质量评估（LLM-as-judge）。
 
-现有 eval/evaluate.py 只量化「检索」(Recall/Hit/MRR)，但 LLM 生成的「答案」质量
-没有评估闭环——调 prompt / 换模型时无据可依。本脚本补上这一环：
+eval/evaluate.py 量化「检索」(Recall/Hit/MRR)；本脚本补上「答案」侧的评估闭环——
+调 prompt / 换模型时也能拿到一组可比的分数。
 
 对 eval/answer_set.json 的每道题，跑完整 RAG（检索 + 生成），再用一个 LLM 裁判
 按四个维度打分（1~5）：

@@ -17,9 +17,6 @@ from src.parser import (
 from src.vector_store import build_vector_store
 from src.web import create_app, CUSTOM_CSS
 
-# 向量库体积护栏：超过此值时提示（仍随仓库提交，但避免无意中把库撑爆 git）
-VECTOR_STORE_WARN_MB = int(__import__("os").getenv("VECTOR_STORE_WARN_MB", "150"))
-
 
 def _collect_articles():
     """汇总要入库的条文：民法典（data/raw）+ 精选目录（本地 Laws/，存在才接入）。"""
@@ -58,9 +55,9 @@ def _warn_if_large():
                 total += p.stat().st_size
     mb = total / (1024 * 1024)
     print(f"\n向量库体积：{mb:.1f} MB")
-    if mb > VECTOR_STORE_WARN_MB:
+    if mb > config.VECTOR_STORE_WARN_MB:
         print(
-            f"WARN - 向量库超过 {VECTOR_STORE_WARN_MB} MB。仓库会随之变大；"
+            f"WARN - 向量库超过 {config.VECTOR_STORE_WARN_MB} MB。仓库会随之变大；"
             f"如需精简，可在 .env 设 EMBED/缩减 LAW_CATALOG，或改为启动时构建"
             f"（取消 .gitignore 对 vector_store/ 的放开，依赖 app.py 兜底构建）。"
         )

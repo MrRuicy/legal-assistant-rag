@@ -22,7 +22,7 @@ def _article_id(law_name: str, article_no: int, sub_no: int = 0) -> str:
 
 
 def _article_key(hit: Dict):
-    """合并/去重用的组合键：(法律名, 条号, 附加条序号)。兼容缺字段的旧数据。"""
+    """合并/去重用的组合键：(法律名, 条号, 附加条序号)。"""
     return (hit.get("law_name", ""), hit["article_no"], hit.get("sub_no", 0))
 
 
@@ -108,7 +108,7 @@ class VectorStore:
         if not candidates:
             return []
 
-        # 1.5 相关性闸门：若所有候选的向量距离都超过阈值，判定问题与民法典无关，
+        # 1.5 相关性闸门：若所有候选的向量距离都超过阈值，判定问题与已接入法律无关，
         # 返回空（交由上层回"未找到相关条文"），避免把无关条文喂给 LLM 诱发幻觉。
         if config.MAX_DISTANCE > 0:
             dists = [c["distance"] for c in candidates if c.get("distance") is not None]

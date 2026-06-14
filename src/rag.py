@@ -393,12 +393,13 @@ class LegalRAG:
 
 
 if __name__ == "__main__":
-    # 测试
+    # 烟雾测试：跑一道民法典里的高频题，确认链路通畅
     rag = LegalRAG()
-    result = rag.answer("父母是否有义务赡养成年子女？")
-    print("问题:", "父母是否有义务赡养成年子女？")
+    q = "诉讼时效一般是多少年？"
+    result = rag.answer(q)
+    print("问题:", q)
     print("\n答案:\n", result["answer"])
     print("\n引用条文:")
     for ref in result["references"]:
-        print(f"  - 第{ref['article_no']}条: {ref['article_text'][:50]}...")
+        print(f"  - 《{ref.get('law_name','')}》第{ref['article_no']}条: {ref['article_text'][:50]}...")
     print("\n", result["disclaimer"])

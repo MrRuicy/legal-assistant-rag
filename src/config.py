@@ -3,18 +3,8 @@
 所有可调项通过 .env 注入，代码里不写死任何密钥。
 """
 import os
-import sys
 from pathlib import Path
 from dotenv import load_dotenv
-
-# Windows 控制台默认 stdout 编码为 GBK，打印中文会乱码（终端按 UTF-8 解读）。
-# 此模块被所有入口导入，故在此统一把 stdout/stderr 切到 UTF-8，根治乱码。
-for _stream in (sys.stdout, sys.stderr):
-    if hasattr(_stream, "reconfigure"):
-        try:
-            _stream.reconfigure(encoding="utf-8")
-        except Exception:
-            pass
 
 load_dotenv()
 
@@ -25,12 +15,10 @@ DATA_PROCESSED_DIR = ROOT_DIR / "data" / "processed"  # 解析后的统一 schem
 VECTOR_STORE_DIR = ROOT_DIR / "vector_store"      # ChromaDB 持久化目录
 COLLECTION_NAME = "chinese_laws"
 
-# ---- 应用品牌 / 适用范围 ----
-# 多法律接入后，界面与 prompt 不再写死「民法典」。APP_LAW_SCOPE 用于 prompt 里
-# 说明助手覆盖哪些法律（由 setup 实际接入的法律决定，可在 .env 覆盖文案）。
+# ---- 应用品牌 ----
+# 多法律接入后，界面文案由这两个变量决定，不再写死「民法典」。
 APP_TITLE = os.getenv("APP_TITLE", "中国法律助手")
 APP_SUBTITLE = os.getenv("APP_SUBTITLE", "基于 RAG 的中国法律法规智能问答 · 多轮对话 · 条文引用校验")
-APP_LAW_SCOPE = os.getenv("APP_LAW_SCOPE", "中国现行法律法规")
 
 # ---- LLM（默认 ModelScope，OpenAI 兼容）----
 # 主供应商 key / base_url；故障转移链里未单独指定 key/base_url 的档位都继承这两个值。
@@ -55,7 +43,6 @@ _DEFAULT_FALLBACKS = [
     "ZhipuAI/GLM-5",
     "deepseek-ai/DeepSeek-V4-Flash",
     "MiniMax/MiniMax-M2.5",
-    "deepseek-ai/DeepSeek-V3.2",
 ]
 
 
@@ -97,6 +84,10 @@ SILICONFLOW_EMBED_MODEL = os.getenv("SILICONFLOW_EMBED_MODEL", "BAAI/bge-m3")
 # 每行一条：{ts, question, rewrite, liked, answer, refs:[{law,no}], verify_status}
 FEEDBACK_LOG_ENABLED = os.getenv("FEEDBACK_LOG_ENABLED", "true").lower() == "true"
 FEEDBACK_LOG_PATH = ROOT_DIR / "data" / "feedback.jsonl"
+
+# ---- 向量库体积护栏 ----
+# setup 构建后若向量库超过此 MB 数会提示（仓库会随之变大）。仅提示，不阻断。
+VECTOR_STORE_WARN_MB = int(os.getenv("VECTOR_STORE_WARN_MB", "150"))
 
 # ---- Query embedding 缓存 ----
 # 每次提问都要对 query 求一次 embedding（消耗供应商配额、增加延迟）。
