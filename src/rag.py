@@ -1,5 +1,6 @@
 """RAG 问答链：检索 + LLM 生成（强制条文引用与免责）。"""
 import re
+import time
 from typing import List, Dict
 from openai import OpenAI
 
@@ -24,9 +25,67 @@ class LegalRAG:
             ck = (p["api_key"], p["base_url"])
             if ck not in self._clients:
                 self._clients[ck] = OpenAI(api_key=p["api_key"], base_url=p["base_url"])
+        # 断路器冷却表：{(model, base_url): 冷却截止时间戳}。
+        # 某档撞限额后记下冷却到期时间，后续调用直接跳过它（实例级，Web 单例进程内长期有效）。
+        self._cooldown: Dict[tuple, float] = {}
+
+    @staticmethod
+    def _provider_key(provider: Dict) -> tuple:
+        """断路器键：(model, base_url)。按模型+供应商隔离冷却（同 base_url 不同模型各算各的）。"""
+        return (provider["model"], provider["base_url"])
+
+    def _order_providers(self, providers: List[Dict]) -> List[Dict]:
+        """按断路器状态重排：未冷却的保持原优先级在前，冷却中的排到链尾作兜底。
+
+        这样主力模型耗尽后，后续调用直接从下一个可用档开始，不再每次白撞已知限额的档；
+        但冷却中的仍保留在链尾——万一所有档都在冷却，至少还能试（不会无档可用）。
+        """
+        now = time.time()
+        fresh, cooling = [], []
+        for p in providers:
+            if self._cooldown.get(self._provider_key(p), 0) > now:
+                cooling.append(p)
+            else:
+                fresh.append(p)
+        return fresh + cooling
+
+    def _mark_cooldown(self, provider: Dict, err: Exception) -> None:
+        """某档撞限额，记入冷却。靠响应头区分每日耗尽（长冷却）与 RPM 限速（短冷却）。"""
+        remaining = self._read_remaining_header(err)
+        if remaining == 0:
+            # 每日配额耗尽：今天不会恢复，长冷却避免反复重撞
+            cd = config.LLM_EXHAUST_COOLDOWN_SEC
+        else:
+            # RPM 限速（或读不到头）：短冷却，过会儿自动恢复重试
+            cd = config.LLM_RPM_COOLDOWN_SEC
+        self._cooldown[self._provider_key(provider)] = time.time() + cd
+
+    @staticmethod
+    def _read_remaining_header(err: Exception):
+        """从 429 异常的响应头读「模型当天剩余额度」。读不到返回 None。
+
+        ModelScope 响应头：modelscope-ratelimit-model-requests-remaining。
+        """
+        try:
+            resp = getattr(err, "response", None)
+            if resp is None:
+                return None
+            headers = getattr(resp, "headers", {}) or {}
+            # httpx headers 大小写不敏感，但保险起见两种都试
+            val = headers.get("modelscope-ratelimit-model-requests-remaining")
+            if val is None:
+                val = headers.get("Modelscope-Ratelimit-Model-Requests-Remaining")
+            return int(val) if val is not None else None
+        except Exception:
+            return None
 
     def _client_for(self, provider: Dict) -> OpenAI:
-        return self._clients[(provider["api_key"], provider["base_url"])]
+        ck = (provider["api_key"], provider["base_url"])
+        # 懒加载：agent 可能传入故障转移链之外的 provider（如便宜的 Planner 模型），
+        # 缺失时按需创建并缓存，使 _complete 能接受任意 providers 列表。
+        if ck not in self._clients:
+            self._clients[ck] = OpenAI(api_key=provider["api_key"], base_url=provider["base_url"])
+        return self._clients[ck]
 
     @staticmethod
     def _is_quota_error(e: Exception) -> bool:
@@ -36,37 +95,87 @@ class LegalRAG:
         msg = str(e).lower()
         return "429" in msg or "quota" in msg or "rate limit" in msg
 
-    def _complete(self, messages: List[Dict], temperature: float = 0.1) -> str:
-        """非流式调用，按 config.LLM_PROVIDERS 优先级故障转移（配额超限自动换下一档）。
+    @staticmethod
+    def _is_transient_error(e: Exception) -> bool:
+        """判断异常是否为「瞬时可重试」错误（超时 / 连接失败 / 5xx），用于故障转移。
 
+        与配额错误并列：这类错误换一档（甚至换供应商）往往能成功，不该直接抛出中止。
+        显式短超时 + 这里的判定，共同保证挂起的调用快速切走而非干等。
+        """
+        # OpenAI SDK 的超时/连接异常类名包含 Timeout / Connection；5xx 用 status_code 判
+        name = type(e).__name__.lower()
+        if "timeout" in name or "connection" in name or "apiconnection" in name:
+            return True
+        sc = getattr(e, "status_code", None)
+        if isinstance(sc, int) and 500 <= sc < 600:
+            return True
+        msg = str(e).lower()
+        return "timed out" in msg or "timeout" in msg or "connection error" in msg
+
+    def _complete(self, messages: List[Dict], temperature: float = 0.1,
+                  providers: List[Dict] = None) -> str:
+        """非流式调用，按 providers 优先级故障转移（配额超限自动换下一档）。
+
+        providers 默认用 config.LLM_PROVIDERS；agent 可传入自定义链（如便宜的
+        Planner/Reflect 模型），实现按节点分级调用、压住多跳放大的成本。
+        断路器：先按冷却状态重排（跳过已知限额的档），命中限额时记入冷却。
         所有档位都配额超限时抛出最后一个异常，交由调用方处理。
         """
         last_err = None
-        for provider in self.providers:
+        for provider in self._order_providers(providers or self.providers):
             try:
                 resp = self._client_for(provider).chat.completions.create(
                     model=provider["model"],
                     messages=messages,
                     temperature=temperature,
                     stream=False,
+                    timeout=config.LLM_TIMEOUT,  # 显式短超时，挂起调用快速切下一档
                 )
-                return resp.choices[0].message.content
+                content = self._extract_completion(resp)
+                if content:
+                    return content
+                # 空/畸形响应（如某档返回 choices=None 或 content 为空）：
+                # 当作该档不可用，换下一档（避免单档抽风拖垮整条链）。
+                last_err = RuntimeError(f"模型 {provider['model']} 返回空响应")
+                continue
             except Exception as e:
+                # 配额超限 / 瞬时错误（超时/连接/5xx）都换下一档；其余（参数等）直接抛出。
                 if self._is_quota_error(e):
+                    self._mark_cooldown(provider, e)  # 记入断路器冷却
                     last_err = e
-                    continue  # 配额超限，换下一档
-                raise  # 其他错误（网络/参数等）直接抛出
+                    continue
+                if self._is_transient_error(e):
+                    last_err = e
+                    continue
+                raise
         raise last_err if last_err else RuntimeError("无可用模型")
+
+    @staticmethod
+    def _extract_completion(resp) -> str:
+        """安全地从 completion 响应里取文本，畸形结构返回空串（触发故障转移）。
+
+        个别供应商偶尔返回 choices=None / 空列表 / message.content=None，
+        直接 resp.choices[0] 会 TypeError。这里统一兜底，避免整条多跳链崩溃。
+        """
+        try:
+            choices = getattr(resp, "choices", None)
+            if not choices:
+                return ""
+            content = choices[0].message.content
+            return content or ""
+        except Exception:
+            return ""
 
     def _stream_complete(self, messages: List[Dict], temperature: float = 0.1):
         """流式调用，按 config.LLM_PROVIDERS 优先级故障转移。
 
         仅在「尚未产出任何 token」时才切换档位，避免向用户重复输出。
         一旦开始产出内容后再报错，则直接抛出（无法干净重试）。
+        断路器：先按冷却状态重排（跳过已知限额的档），命中限额时记入冷却。
         所有档位都配额超限时抛出最后一个异常。
         """
         last_err = None
-        for provider in self.providers:
+        for provider in self._order_providers(self.providers):
             produced = False
             try:
                 stream = self._client_for(provider).chat.completions.create(
@@ -74,6 +183,7 @@ class LegalRAG:
                     messages=messages,
                     temperature=temperature,
                     stream=True,
+                    timeout=config.LLM_TIMEOUT,  # 显式短超时，挂起调用快速切下一档
                 )
                 for chunk in stream:
                     delta = chunk.choices[0].delta
@@ -84,9 +194,14 @@ class LegalRAG:
             except Exception as e:
                 if produced:
                     raise  # 已输出部分内容，不能重试
+                # 配额超限 / 瞬时错误（超时/连接/5xx）且尚未输出 → 换下一档
                 if self._is_quota_error(e):
+                    self._mark_cooldown(provider, e)  # 记入断路器冷却
                     last_err = e
-                    continue  # 配额超限且尚未输出，换下一档
+                    continue
+                if self._is_transient_error(e):
+                    last_err = e
+                    continue
                 raise
         raise last_err if last_err else RuntimeError("无可用模型")
 

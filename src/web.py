@@ -16,6 +16,7 @@ import gradio as gr
 from . import config
 from .parser import chinese_to_arabic
 from .rag import LegalRAG, _strip_law_prefix
+from .agent import LegalAgent
 
 
 # 简洁现代风：大留白、大圆角、单一灰阶、几乎无边框
@@ -135,6 +136,31 @@ body, .gradio-container {
     height: 38px !important;
 }
 #clear-btn:hover { background: #e9e9eb !important; }
+
+/* ── 深度模式开关：紧凑行，小字灰调 ── */
+#agent-mode-row {
+    position: absolute !important;
+    left: 50%;
+    bottom: 54px;  /* 在输入框上方，留足间距 */
+    transform: translateX(-50%);
+    width: calc(100% - 2px) !important;
+    max-width: calc(100% - 2px);
+    z-index: 5;
+    gap: 0 !important;
+    padding: 0 12px !important;
+}
+#agent-mode-checkbox label {
+    font-size: 0.82rem !important;
+    color: var(--muted) !important;
+    font-weight: 400 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+}
+#agent-mode-checkbox input[type="checkbox"] {
+    margin: 0 !important;
+    cursor: pointer !important;
+}
 
 /* ── 空状态：欢迎 + 示例 chips，悬浮于对话框中部（不占文档流高度）── */
 #examples-wrap {
@@ -332,6 +358,57 @@ def _answer_footer_html(verify: Optional[dict], hits: List[Dict]) -> str:
     return f'<div class="answer-footer">{badge}{refs}</div>'
 
 
+def _trace_block_html(trace: List[Dict]) -> str:
+    """Agent 多跳轨迹 → 折叠块（每个节点一行，展示规划/检索/反思决策）。
+
+    单跳模式下 trace 为空，不渲染此块。多跳模式展示每轮查了什么、Reflect 判断。
+    """
+    if not trace:
+        return ""
+    lines = []
+    for i, t in enumerate(trace, 1):
+        node = t.get("node", "")
+        if node == "planner":
+            is_complex = "复杂" if t.get("is_complex") else "简单"
+            subs = t.get("subs", [])
+            subs_text = "、".join(f'"{s}"' for s in subs[:3])
+            if len(subs) > 3:
+                subs_text += f" 等 {len(subs)} 个"
+            lines.append(f"<b>规划</b>：判定为{is_complex}问题 → {subs_text}")
+        elif node == "retrieve":
+            hop = t.get("hop", "?")
+            queried = t.get("queried", [])
+            n = t.get("n_hits_total", 0)
+            q_text = "、".join(f'"{q}"' for q in queried[:2])
+            if len(queried) > 2:
+                q_text += f" 等 {len(queried)} 个"
+            lines.append(f"<b>检索 #{hop}</b>：{q_text} → 累积 {n} 条")
+        elif node == "reflect":
+            hop = t.get("hop", "?")
+            decision = t.get("decision", "")
+            dec_label = {"answer": "✓ 信息充分，开始作答", "continue": "⟳ 需补充", "stop_max_hops": "⊗ 达到跳数上限，强制收敛"}.get(decision, decision)
+            missing = t.get("missing", [])
+            if missing:
+                miss_text = "、".join(f'"{m}"' for m in missing[:2])
+                if len(missing) > 2:
+                    miss_text += f" 等 {len(missing)} 个"
+                dec_label += f" → {miss_text}"
+            lines.append(f"<b>反思 #{hop}</b>：{dec_label}")
+        elif node == "answer":
+            n = t.get("n_context", 0)
+            lines.append(f"<b>作答</b>：基于 {n} 条法律条文生成答案")
+    body = "<br>".join(f'<div style="padding:3px 0;font-size:0.84rem;line-height:1.6;">{ln}</div>' for ln in lines)
+    return (
+        '<details class="refs-block" style="margin-bottom:9px;">'
+        "<summary>"
+        '<span class="blk-arrow">▸</span>多跳轨迹'
+        f'<span class="blk-count">{len(trace)} 步</span>'
+        "</summary>"
+        f'<div class="refs-inner" style="color:#52525b;">{body}</div>'
+        "</details>"
+    )
+
+
 # 答案中「《X法》第N条」匹配：同时支持阿拉伯数字与中文数字
 _CITE_RE = re.compile(
     r"《([^》]+)》\s*第\s*(\d+|[一二三四五六七八九十百千零]+)\s*条(之[一二三四五六七八九十]+)?"
@@ -389,13 +466,17 @@ def _append_feedback(record: Dict) -> None:
 
 def create_app():
     rag = LegalRAG()
+    agent = LegalAgent(rag)  # 复用同一 RAG 实例（共享 VectorStore）
 
-    def chat_stream(question: str, history: list, refs_state: list):
+    def chat_stream(question: str, history: list, refs_state: list, agent_mode: bool = False):
         """流式回调（单栏）。
 
+        agent_mode=False（默认）：单跳，调用 rag.answer_stream 流式输出。
+        agent_mode=True：多跳 Agent，调用 agent.run_stream（分阶段 yield）。
+
         校验徽章与引用条文不再走独立侧栏，而是在流式结束后作为页脚 HTML
-        追加进当前 assistant 消息内容里。refs_state 仍维护每条回答的快照，
-        供 👍/👎 反馈按消息索引回查上下文落盘。
+        追加进当前 assistant 消息内容里。Agent 模式额外在页脚前插入轨迹折叠块。
+        refs_state 仍维护每条回答的快照，供 👍/👎 反馈按消息索引回查上下文落盘。
 
         Yields:
             (history, refs_state)
@@ -413,57 +494,88 @@ def create_app():
         last_verify: Optional[Dict] = None
         disclaimer_md: str = ""
         rewrite_used: Optional[str] = None
+        trace_list: List[Dict] = []  # Agent 模式独有
 
         def _compose(linkify: bool) -> str:
-            """把答案正文 + 免责声明 + 页脚拼成消息内容。"""
+            """把答案正文 + 免责声明 + 轨迹(Agent) + 页脚拼成消息内容。"""
             ans = "".join(answer_parts)
             if linkify:
                 ans = _linkify_citations(ans, refs_hits)
             body = ans
             if disclaimer_md:
                 body += f"\n\n---\n\n{disclaimer_md}"
+            # Agent 模式：在页脚前先插入轨迹折叠块
+            if agent_mode:
+                trace_html = _trace_block_html(trace_list)
+                if trace_html:
+                    body += f"\n\n{trace_html}"
             footer = _answer_footer_html(last_verify, refs_hits)
             if footer:
                 body += f"\n\n{footer}"
             return body
 
-        for chunk in rag.answer_stream(question, history=prior_history):
-            ctype = chunk["type"]
-            content = chunk["content"]
-            if ctype == "rewrite":
-                rewrite_used = content if isinstance(content, str) else None
-                continue
-            elif ctype == "references":
-                refs_hits = content if isinstance(content, list) else []
-                continue
-            elif ctype == "answer":
-                if isinstance(content, str):
-                    answer_parts.append(content)
-                history[-1]["content"] = "".join(answer_parts)
-                yield history, refs_state
-            elif ctype == "verify":
-                last_verify = content if isinstance(content, dict) else None
-                history[-1]["content"] = _compose(linkify=True)
-                yield history, refs_state
-            elif ctype == "disclaimer":
-                disclaimer_md = content if isinstance(content, str) else ""
-                history[-1]["content"] = _compose(linkify=True)
-                yield history, refs_state
-            elif ctype == "error":
-                history[-1]["content"] = f"⚠️ {content}"
-                yield history, refs_state
-                refs_state = refs_state + [{"hits": [], "verify": None, "rewrite": rewrite_used, "question": question, "answer": f"⚠️ {content}"}]
-                return
+        if agent_mode:
+            # 多跳 Agent：非逐 token 流式，分阶段 yield（trace → refs → answer → verify → disclaimer）
+            for chunk in agent.run_stream(question, history=prior_history):
+                chunk_type = chunk.get("type")
+                if chunk_type == "trace":
+                    trace_list = chunk.get("content", [])
+                    # trace 到齐后先 yield 一次（让前端尽早展示轨迹），正文暂空
+                    history[-1]["content"] = _compose(linkify=False)
+                    yield history, refs_state
+                elif chunk_type == "references":
+                    refs_hits = chunk.get("content", [])
+                elif chunk_type == "answer":
+                    answer_parts.append(chunk.get("content", ""))
+                    history[-1]["content"] = _compose(linkify=False)
+                    yield history, refs_state
+                elif chunk_type == "verify":
+                    last_verify = chunk.get("content", {})
+                elif chunk_type == "disclaimer":
+                    disclaimer_md = chunk.get("content", "")
+            # 最终 linkify
+            history[-1]["content"] = _compose(linkify=True)
+            refs_state.append({"hits": refs_hits, "verify": last_verify})
+            yield history, refs_state
+        else:
+            # 单跳：原流式逻辑（逐 token）
+            for chunk in rag.answer_stream(question, history=prior_history):
+                ctype = chunk["type"]
+                content = chunk["content"]
+                if ctype == "rewrite":
+                    rewrite_used = content if isinstance(content, str) else None
+                    continue
+                elif ctype == "references":
+                    refs_hits = content if isinstance(content, list) else []
+                    continue
+                elif ctype == "answer":
+                    if isinstance(content, str):
+                        answer_parts.append(content)
+                    history[-1]["content"] = "".join(answer_parts)
+                    yield history, refs_state
+                elif ctype == "verify":
+                    last_verify = content if isinstance(content, dict) else None
+                    history[-1]["content"] = _compose(linkify=True)
+                    yield history, refs_state
+                elif ctype == "disclaimer":
+                    disclaimer_md = content if isinstance(content, str) else ""
+                    history[-1]["content"] = _compose(linkify=True)
+                    yield history, refs_state
+                elif ctype == "error":
+                    history[-1]["content"] = f"⚠️ {content}"
+                    yield history, refs_state
+                    refs_state = refs_state + [{"hits": [], "verify": None, "rewrite": rewrite_used, "question": question, "answer": f"⚠️ {content}"}]
+                    return
 
-        history[-1]["content"] = _compose(linkify=True)
-        refs_state = refs_state + [{
-            "hits": refs_hits,
-            "verify": last_verify,
-            "rewrite": rewrite_used,
-            "question": question,
-            "answer": "".join(answer_parts),
-        }]
-        yield history, refs_state
+            history[-1]["content"] = _compose(linkify=True)
+            refs_state = refs_state + [{
+                "hits": refs_hits,
+                "verify": last_verify,
+                "rewrite": rewrite_used,
+                "question": question,
+                "answer": "".join(answer_parts),
+            }]
+            yield history, refs_state
 
     def on_like(history: list, refs_state: list, evt: gr.LikeData):
         """用户对消息点 👍/👎，落 JSONL 攒难例集。"""
@@ -543,6 +655,18 @@ def create_app():
                 submit_btn = gr.Button("发送", variant="primary", scale=1, min_width=72, elem_id="send-btn")
                 clear_btn = gr.Button("清空", scale=1, min_width=64, elem_id="clear-btn")
 
+            # 深度模式开关：悬浮在输入区下方（小字说明 + Checkbox）
+            with gr.Row(elem_id="agent-mode-row", elem_classes="compact-row"):
+                agent_mode_cb = gr.Checkbox(
+                    label="深度模式（多跳检索 Agent，自动规划+反思，适合复杂问题）",
+                    value=config.AGENT_MODE,
+                    scale=1,
+                    elem_id="agent-mode-checkbox",
+                )
+
+        # 状态：深度模式当前值（初始从 config 读，用户切换后更新）
+        agent_mode_state = gr.State(config.AGENT_MODE)
+
         def _stash(q: str):
             """把输入框内容转存到 state，并立即清空输入框。"""
             return q, "", gr.update(visible=False)
@@ -558,7 +682,7 @@ def create_app():
                 _stash, inputs=[question_input], outputs=[question_store, question_input, examples_wrap]
             ).then(
                 chat_stream,
-                inputs=[question_store, chatbot, refs_state],
+                inputs=[question_store, chatbot, refs_state, agent_mode_state],
                 outputs=[chatbot, refs_state],
             )
 
@@ -568,9 +692,16 @@ def create_app():
                 _stash, inputs=[btn], outputs=[question_store, question_input, examples_wrap]
             ).then(
                 chat_stream,
-                inputs=[question_store, chatbot, refs_state],
+                inputs=[question_store, chatbot, refs_state, agent_mode_state],
                 outputs=[chatbot, refs_state],
             )
+
+        # 深度模式 Checkbox：切换时同步到 state
+        agent_mode_cb.change(
+            lambda x: x,
+            inputs=[agent_mode_cb],
+            outputs=[agent_mode_state],
+        )
 
         # 换一换：重抽 chips
         shuffle_btn.click(_shuffle, outputs=example_btns)

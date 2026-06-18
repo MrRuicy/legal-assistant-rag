@@ -8,15 +8,16 @@
 
 - ✅ **多法律覆盖**：民法典 + 精选刑事/商事/劳动/行政/诉讼等 38 部法律（5165 条），可按目录继续扩充
 - ✅ **混合检索**：向量召回 + BM25 关键词召回，加权 RRF 融合，兼顾语义与法律术语精确匹配
+- ✅ **多跳检索 Agent（深度模式）**：LangGraph 状态机（Planner/Retrieve/Reflect/Answer），对"被辞退能不能告、怎么告"这类多诉求问题自动拆解、多轮检索、反思补全——跨法律条文召回率 0.597→0.838。简单题自动走单跳快路径，不画蛇添足
 - ✅ **跨法律引用校验**：按「《法律名》第X条」核对引用，杜绝把甲法条号安到乙法上，醒目徽章标注
 - ✅ **准确引用**：答案强制写明法律名与条号（《中华人民共和国公司法》第X条）
 - ✅ **多轮对话**：支持追问，自动改写依赖上下文的问题（如"有无例外"→"诉讼时效的例外"）再检索
 - ✅ **流式输出**：回答逐字呈现，无需等待整段生成
-- ✅ **异构故障转移**：模型配额超限（429）时按优先级自动切换下一档，末档可挂任意供应商真正兜底
+- ✅ **配额感知故障转移**：模型配额超限（429）时自动切换下一档，断路器记住已耗尽/限速的档直接跳过；显式超时防服务端挂起；末档可挂任意供应商真正兜底
 - ✅ **Query embedding 缓存**：相同问题的 query 向量本地缓存，省 embedding 配额、降首字延迟
 - ✅ **相关性闸门**：距离阈值拦截无关问题（如天气、菜谱），返回"未找到相关条文"
 - ✅ **反馈难例闭环**：内置 👍/👎 反馈按钮，落盘到 `data/feedback.jsonl`，可作难例集回灌评估
-- ✅ **双重评估集**：检索评估（Recall/Hit/MRR）+ 答案质量评估（LLM-as-judge 四维打分）
+- ✅ **双口径评估**：检索 Coverage（多跳召回率）+ 答案质量（LLM-as-judge 四维打分），单跳/Agent 可对比
 - ✅ **可切换 Embedding**：支持 ModelScope API 和 SiliconFlow API 两种供应商
 - ✅ **本地向量库**：ChromaDB 本地持久化，无需额外服务器
 - ✅ **合规设计**：内置免责声明，明确不构成法律建议
@@ -103,13 +104,19 @@ legal-assistant-rag/
 │   ├── bm25_retriever.py  # BM25 关键词检索（jieba 分词，分词语料磁盘缓存）
 │   ├── reranker.py      # rerank 精排客户端（可选，默认关闭）
 │   ├── vector_store.py  # 向量库 + 混合检索 + RRF 融合 + 距离闸门（跨法律唯一 ID）
-│   ├── rag.py           # RAG 问答链（检索 + 改写 + 异构故障转移 + 跨法律引用校验）
-│   └── web.py           # Gradio Web 界面（流式 + 多轮 + 反馈）
+│   ├── rag.py           # RAG 问答链（检索 + 改写 + 配额感知故障转移 + 跨法律引用校验）
+│   ├── agent.py         # 多跳检索 Agent（LangGraph 状态机：Planner/Retrieve/Reflect/Answer）
+│   ├── tools.py         # Agent 工具层（检索包装 + 合并去重 + 交叉引用 + 时效计算）
+│   └── web.py           # Gradio Web 界面（流式 + 多轮 + 深度模式开关 + 轨迹展示 + 反馈）
 ├── eval/
+│   ├── README.md        # 评估体系说明（检索 Coverage / 答案质量 两种口径）
 │   ├── eval_set.json    # 检索评估集（100 题，覆盖 37 部法律）
 │   ├── evaluate.py      # 检索评估脚本（Recall@K / Hit@K / MRR）
 │   ├── answer_set.json  # 答案质量评估集（覆盖多部法律 + 负样本）
-│   └── eval_answer.py   # 答案质量评估脚本（LLM-as-judge 四维打分）
+│   ├── eval_answer.py   # 答案质量评估脚本（LLM-as-judge，支持 --mode single/agent）
+│   ├── multihop_set.json   # 多跳评估集（20 题，标注跨法律期望条文）
+│   ├── eval_multihop.py    # 多跳检索评估（Coverage/LawCoverage，支持 single/fixed/agent）
+│   └── *.json（结果）   # 各阶段评估结果（baseline/phase1/phase2/answer_*，见 eval/README.md）
 ├── vector_store/        # 预构建向量库 + BM25 缓存（随仓库提交，供创空间免冷启动）
 │   └── _query_cache/    # query embedding 磁盘缓存（运行时生成，不入库）
 ├── main.py              # 本地入口（setup / serve）
@@ -153,6 +160,38 @@ LawArticle {
 }
 ```
 
+### 多跳检索 Agent（深度模式）
+
+上面的单跳链对"被违法辞退能不能告、怎么告"这类**多诉求问题**力不从心——单次检索召回的条文常不完整（赔偿标准、仲裁程序、时效分散在不同法律）。深度模式用 LangGraph 状态机解决：
+
+```
+                  ┌─────────────┐
+   用户提问 ───►   │  Planner    │  判断简单/复杂；复杂则拆成 2~4 个子问题
+                  └──────┬──────┘
+                         ↓
+              ┌──────────────────────┐
+              │   Retrieve            │  ◄── 复用单跳的混合检索栈（一行不改）
+              │   （逐子问题检索+合并去重）│
+              └──────────┬───────────┘
+                         ↓
+                  ┌──────────────┐   不够（缺哪个诉求点）
+                  │  Reflect     │ ──────────────► 回 Retrieve（受 max_hops 上限）
+                  └──────┬───────┘
+                         ↓ 够了
+                  ┌──────────────┐
+                  │  Answer      │  复用单跳的 prompt + 引用校验
+                  └──────────────┘
+```
+
+**关键设计**：
+- **模型分级**：Planner/Reflect 用便宜快模型，Answer 用强模型——压住多跳放大的 API 成本
+- **可降级**：Planner 判简单题直接单跳作答，不为难简单题（守住回归底线）
+- **防死循环**：`MAX_HOPS` 硬上限 + 每跳子问题去重
+- **可观测**：每节点写 trace（查了什么、Reflect 怎么判断），Web 端展示检索轨迹
+- **专用工具**（可选）：交叉引用（顺"依照第X条"拉关联条文）、时效计算（劳动/民事/刑事）
+
+效果：跨法律条文召回率（Coverage）从单跳 0.597 提升到 0.838，且整部法律不再漏召（LawCoverage 0.95→0.98）。详见 [eval/README.md](eval/README.md)。
+
 ## 技术栈
 
 - **数据源**：[LawRefBook/Laws](https://github.com/LawRefBook/Laws) 法律 markdown（通用解析器）
@@ -192,7 +231,26 @@ python -m eval.eval_answer --limit 3       # 只评前 3 题（省配额）
 python -m eval.eval_answer --save out.json # 同时落盘逐题明细
 ```
 
-> 答案评估每题至少 2 次 LLM 调用（生成 + 裁判），注意配额。
+> 答案评估每题至少 2 次 LLM 调用（生成 + 裁判），注意配额。`--mode agent` 走多跳 Agent。
+
+### 多跳检索评估（Coverage，深度模式）
+
+衡量多跳 Agent 相对单跳的召回提升，题集是 20 道答案需 ≥2 次检索才完整的多跳题：
+
+```bash
+python -m eval.eval_multihop --mode single          # 单跳基线
+python -m eval.eval_multihop --mode fixed           # 固定多跳（先拆完一次性查）
+python -m eval.eval_multihop --mode agent           # LangGraph Agent（自适应补跳）
+```
+
+| 模式 | Coverage | LawCoverage | 平均轮数 |
+|------|----------|-------------|----------|
+| 单跳基线 | 0.597 | 0.950 | 1 |
+| 固定多跳 | 0.771 | 1.000 | 2.85 |
+| **Agent（深度模式）** | **0.838** | **0.983** | 1.90 |
+
+> 单跳即便把 top_k 翻倍（8→16）也只到 0.688——证明缺口是结构性的（单 query 召不全跨法律条文簇），
+> 需要多跳规划。两种评估口径的完整说明见 [eval/README.md](eval/README.md)。
 
 ### 反馈难例闭环
 

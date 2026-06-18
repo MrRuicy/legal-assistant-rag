@@ -18,6 +18,10 @@ venv/
 # query embedding 缓存（运行时本地生成，不入库）
 vector_store/_query_cache/
 
+# 评估/服务运行日志（运行时产物，不入库）
+eval/*.log
+web_serve.log
+
 # LawRefBook/Laws 法律源仓库：本地克隆用于 setup 解析，体量大，不随本仓库提交
 Laws/
 
