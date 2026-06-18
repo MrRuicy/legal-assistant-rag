@@ -13,6 +13,7 @@
 - ✅ **准确引用**：答案强制写明法律名与条号（《中华人民共和国公司法》第X条）
 - ✅ **多轮对话**：支持追问，自动改写依赖上下文的问题（如"有无例外"→"诉讼时效的例外"）再检索
 - ✅ **流式输出**：回答逐字呈现，无需等待整段生成
+- ✅ **现代交互**：即时气泡(回车秒现) + 实时轨迹(深度模式逐节点展示) + 呼吸状态行 + 条号锚点跳转 + 浅色清雅 UI(墨蓝点缀书卷气)
 - ✅ **配额感知故障转移**：模型配额超限（429）时自动切换下一档，断路器记住已耗尽/限速的档直接跳过；显式超时防服务端挂起；末档可挂任意供应商真正兜底
 - ✅ **Query embedding 缓存**：相同问题的 query 向量本地缓存，省 embedding 配额、降首字延迟
 - ✅ **相关性闸门**：距离阈值拦截无关问题（如天气、菜谱），返回"未找到相关条文"
@@ -46,12 +47,13 @@ cp .env.example .env
 ```ini
 # ModelScope（必填，用于 LLM）
 MODELSCOPE_API_KEY=your_modelscope_token_here
-LLM_MODEL=deepseek-ai/DeepSeek-V3.2
+LLM_MODEL=deepseek-ai/DeepSeek-V4-Flash
 
 # 模型故障转移链（可选）：首选模型配额超限时按序自动切换。
 # 每档可以是「纯模型名」（继承主供应商 key/base_url），也可以是「模型|key|base_url」
 # 自带 API 的完整档位——把异构供应商放最后一档即可真正兜底，避免同一家全部 429 一起熄火。
-# LLM_FALLBACK_MODELS=ZhipuAI/GLM-5,deepseek-chat|sk-xxxx|https://api.deepseek.com/v1
+LLM_FALLBACK_MODELS=Qwen/Qwen3-Next-80B-A3B-Instruct,deepseek-ai/DeepSeek-V3.2,moonshotai/Kimi-K2.5,Qwen/Qwen3.5-122B-A10B,ZhipuAI/GLM-5.1,MiniMax/MiniMax-M2.5
+# 异构供应商兜底示例: LLM_FALLBACK_MODELS=...前面省略...,deepseek-chat|sk-xxxx|https://api.deepseek.com/v1
 
 # Embedding 供应商选择（推荐 siliconflow，ModelScope 免费额度较严）
 EMBEDDING_PROVIDER=siliconflow
@@ -85,6 +87,27 @@ python main.py serve
 ```
 
 默认访问地址：`http://localhost:7860`
+
+## 界面特性
+
+### 浅色清雅设计（2026-06-19 改版）
+- **暖白米色背景** + **墨蓝点缀** (#1e3a5f)，书卷气克制，护眼柔和
+- 顶栏衬线体标题 + 墨蓝→金渐变分隔线
+- AI 回答「纸面卡片」质感(白底暖描边)，用户气泡墨蓝，对比清晰
+- 输入框聚焦墨蓝光晕，发送按钮墨蓝渐变 + hover 微动
+- 引用卡片墨蓝左边框层次标识，锚点跳转墨蓝渐隐高亮
+
+### 交互流式优化
+- **即时气泡**：回车后用户问题与空 AI 气泡瞬间出现，无等待感
+- **实时轨迹**（深度模式）：多跳检索过程逐节点实时呈现(规划→检索→反思→作答)，对标 DeepSeek 思考过程
+- **呼吸状态行**：等待期间显示「正在检索相关条文…」等阶段提示(墨蓝圆点呼吸动画)，有内容即替换
+
+### 核心功能
+- **深度模式开关**：简单题走单跳快路径，复杂题开启多跳 Agent(自动规划 + 反思补全)
+- **条号锚点跳转**：答案里的「《XX法》第X条」点击直达页脚引用卡片，条文可展开查看原文
+- **引用校验徽章**：自动检测答案引用是否在检索结果中，防止幻觉(张冠李戴/编造条号)，醒目标注
+- **多轮对话**：支持追问，自动改写依赖上下文的问题(「有无例外」→「诉讼时效的例外」)再检索
+- **反馈闭环**：每条回答下方 👍/👎 按钮，攒难例集(落盘到 `data/feedback.jsonl`)
 
 ## 目录结构
 
@@ -199,7 +222,7 @@ LawArticle {
 - **关键词检索**：jieba 分词 + rank_bm25（BM25Okapi），分词语料磁盘缓存
 - **向量库**：ChromaDB（本地文件型）
 - **检索融合**：加权 Reciprocal Rank Fusion（RRF）
-- **LLM**：ModelScope API（DeepSeek-V3.2 / Qwen3 / GLM-5 等中文模型，支持跨供应商异构故障转移）
+- **LLM**：ModelScope API（DeepSeek-V4-Flash / V3.2 / Qwen3.5 / GLM-5.1 / Kimi-K2.5 等中文模型，支持跨供应商异构故障转移，断路器自动跳过已耗尽/限速档）
 - **Web 框架**：Gradio
 
 ## 评估
