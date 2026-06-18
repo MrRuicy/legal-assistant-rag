@@ -5,8 +5,20 @@ Phase 3 扩展：这些工具在 Reflect 节点判断需要时被调用，补全
 """
 import re
 from typing import List, Dict, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 from .vector_store import VectorStore
+
+
+def _add_years(dt: datetime, years: int) -> datetime:
+    """日期加 N 年（按日历年，非 365 天）。
+
+    2/29 起算且目标年非闰年时回退到 2/28（法律时效边界以日历年计，闰年不另算一天）。
+    """
+    try:
+        return dt.replace(year=dt.year + years)
+    except ValueError:
+        # 2 月 29 日 → 目标年无该日，落到 2 月 28 日
+        return dt.replace(year=dt.year + years, day=28)
 
 
 # ---- Agent 节点辅助工具（检索、去重、格式化）----
@@ -62,50 +74,22 @@ def format_articles_context(hits: List[Dict]) -> str:
     return "\n".join(lines)
 
 
-def decompose_query(question: str) -> List[str]:
-    """查询分解：将复杂问题拆成子问题（Planner 节点的简化版占位实现）。
+def _normalize_article_no(raw: str) -> Optional[str]:
+    """把条号文本规整成阿拉伯数字字符串。
 
-    实际由 Planner 节点用 LLM 完成，这里只是占位（万一需要规则兜底）。
+    接受阿拉伯数字（"47"）或中文数字（"四十七"），返回 "47"；无法解析返回 None。
+    Reflect/正则抓到的条号可能是任一种，统一规整后才能拼 article_id 命中条文。
     """
-    # 占位实现：按"、"/"？"切分，或返回原问题
-    parts = [p.strip() for p in re.split(r'[、？?]', question) if p.strip()]
-    return parts if len(parts) > 1 else [question]
-
-
-def _parse_str_list(text: str) -> List[str]:
-    """从 LLM 输出解析字符串列表（Planner/Reflect 节点用，容忍各种格式）。
-
-    支持格式：
-    - JSON 数组: ["sub1", "sub2"]
-    - 换行列表: "- sub1\n- sub2"
-    - 逗号分隔: "sub1, sub2, sub3"
-    """
-    text = text.strip()
-    # 尝试 JSON
-    if text.startswith("["):
-        try:
-            import json
-            return [s.strip() for s in json.loads(text) if isinstance(s, str) and s.strip()]
-        except Exception:
-            pass
-    # 尝试换行列表（"- xxx" 或 "1. xxx"）
-    if "\n" in text:
-        lines = text.split("\n")
-        result = []
-        for line in lines:
-            line = line.strip()
-            # 去掉列表标记
-            line = re.sub(r'^[-*•]\s*', '', line)
-            line = re.sub(r'^\d+[.)]\s*', '', line)
-            if line:
-                result.append(line)
-        if result:
-            return result
-    # 尝试逗号分隔
-    if "," in text or "，" in text:
-        return [s.strip() for s in re.split(r'[,，]', text) if s.strip()]
-    # 兜底：返回原文（单个子问题）
-    return [text] if text else []
+    raw = raw.strip()
+    if not raw:
+        return None
+    if raw.isdigit():
+        return str(int(raw))
+    try:
+        from .parser import chinese_to_arabic
+        return str(chinese_to_arabic(raw))
+    except Exception:
+        return None
 
 
 # ---- Phase 3 专用工具（交叉引用 / 时效计算）----
@@ -117,22 +101,84 @@ class LegalTools:
         self.vector_store = vector_store
         # 懒加载：首次调用交叉引用工具时才构建引用图（避免启动慢）
         self._reference_graph: Optional[Dict[str, List[Dict]]] = None
+        # id -> 条文 dict（{law_name, article_no, article_text}），建图时一并缓存，
+        # 供 get_article 直接按条号取条文原文（Reflect 补全缺失条文用）。
+        self._id_to_doc: Optional[Dict[str, Dict]] = None
+        # 库内全部法律全称集合，用于把 LLM 给的简称（《民法典》）解析成库内全称
+        # （中华人民共和国民法典），否则精确拼 id 永远命中不了。
+        self._law_names: Optional[set] = None
+
+    def _ensure_graph(self) -> None:
+        if self._reference_graph is None or self._id_to_doc is None:
+            self._build_reference_graph()
+
+    def _resolve_law_name(self, law: str) -> Optional[str]:
+        """把 LLM 给的法律名（常为简称）解析成库内全称。
+
+        匹配顺序：精确 → 补"中华人民共和国"前缀 → 去前缀后相等 → 互相包含（取最短）。
+        无法匹配返回 None。
+        """
+        if not law or not self._law_names:
+            return None
+        if law in self._law_names:
+            return law
+        prefixed = f"中华人民共和国{law}"
+        if prefixed in self._law_names:
+            return prefixed
+        stripped = law.replace("中华人民共和国", "")
+        same = [n for n in self._law_names if n.replace("中华人民共和国", "") == stripped]
+        if same:
+            return same[0]
+        # 兜底：互相包含（如"民法典" ⊂ "中华人民共和国民法典"），取最短全称
+        contains = [n for n in self._law_names if stripped in n or n in stripped]
+        return min(contains, key=len) if contains else None
+
+    def _resolve_article_id(self, article_id: str) -> Optional[str]:
+        """把 "简称#条号" 规整成库内 "全称#条号"；无法解析返回 None。"""
+        if "#" not in article_id:
+            return None
+        law, _, no = article_id.partition("#")
+        full = self._resolve_law_name(law)
+        return f"{full}#{no}" if full else None
+
+    def get_article(self, article_id: str, with_references: bool = True) -> List[Dict]:
+        """按条号取条文原文本身（可选连带它直接引用的条文）。
+
+        这是 Reflect「缺第X条」场景的正解：Reflect 说"缺第47条"意思是要第47条的
+        原文，所以先返回该条本身；with_references=True 时再附上它引用的条文，顺藤摸瓜。
+
+        Args:
+            article_id: 法条 ID，格式 "法律名#条号"（法律名可为简称，会自动解析为库内全称）
+            with_references: 是否连带返回该条直接引用的其他条文
+
+        Returns:
+            条文 dict 列表 [{"law_name","article_no","article_text"}]；该条不存在则返回 []。
+        """
+        self._ensure_graph()
+        resolved_id = self._resolve_article_id(article_id) or article_id
+        doc = self._id_to_doc.get(resolved_id)
+        if not doc:
+            return []
+        result = [doc]
+        if with_references:
+            for ref in self.lookup_referenced_articles(resolved_id, max_depth=1):
+                result.append(ref)
+        return result
 
     def lookup_referenced_articles(self, article_id: str, max_depth: int = 1) -> List[Dict]:
         """法条交叉引用查询：给定一条法条，返回它直接引用的其他条文。
 
-        用例：Agent 看到"依照本法第47条"但第47条不在上下文 → 调此工具补全。
+        用例：补全某条文正文里"依照本法第X条"所指向、但不在上下文的关联条文。
 
         Args:
-            article_id: 法条 ID，格式 "法律名#条号"（如 "劳动合同法#47"）
+            article_id: 法条 ID，格式 "法律名#条号"（如 "中华人民共和国劳动合同法#47"）
             max_depth: 引用深度（1=仅直接引用，2=引用的引用，...）默认1避免爆炸
 
         Returns:
-            被引用条文列表 [{"law":"劳动合同法", "article":"47", "content":"..."}]
+            被引用条文列表 [{"law_name","article_no","article_text"}]
             空列表表示该条文不引用其他条文或引用图未建立。
         """
-        if self._reference_graph is None:
-            self._build_reference_graph()
+        self._ensure_graph()
 
         result = []
         visited = set()
@@ -146,7 +192,8 @@ class LegalTools:
 
             refs = self._reference_graph.get(current_id, [])
             for ref in refs:
-                ref_id = f"{ref['law']}#{ref['article']}"
+                # 引用图存的是 id_to_doc 的条文 dict，键为 law_name / article_no。
+                ref_id = f"{ref['law_name']}#{ref['article_no']}"
                 if ref_id not in visited:
                     result.append(ref)
                     if depth + 1 < max_depth:
@@ -162,23 +209,29 @@ class LegalTools:
         - "适用《民法典》第一千零三十四条" → 民法典#1034
         - "按照第二百零三条执行" → 同法第203条（需上下文推断法律名）
 
-        存入 self._reference_graph = {"劳动合同法#48": [{"law":"劳动合同法","article":"47","content":"..."}]}
+        存入 self._reference_graph = {"劳动合同法#48": [{"law_name":"劳动合同法","article_no":"47","article_text":"..."}]}
+        同时缓存 self._id_to_doc 供 get_article 按条号直接取条文原文。
         """
         self._reference_graph = {}
+        self._id_to_doc = {}
+        self._law_names = set()
         all_articles = self.vector_store.collection.get(include=["metadatas", "documents"])
         if not all_articles or not all_articles.get("ids"):
             return
 
         # 构建 ID → 文档映射，用于反查被引用条文的内容
-        id_to_doc = {}
+        id_to_doc = self._id_to_doc
         for i, doc_id in enumerate(all_articles["ids"]):
             meta = all_articles["metadatas"][i]
             content = all_articles["documents"][i]
+            law_name = meta.get("law_name", "")
             id_to_doc[doc_id] = {
-                "law_name": meta.get("law_name", ""),
+                "law_name": law_name,
                 "article_no": meta.get("article_no", ""),
                 "article_text": content
             }
+            if law_name:
+                self._law_names.add(law_name)
 
         # 解析每条法条，提取引用
         for doc_id, doc in id_to_doc.items():
@@ -264,7 +317,8 @@ class LegalTools:
         try:
             incident_dt = datetime.strptime(incident_date, "%Y-%m-%d")
             query_dt = datetime.strptime(query_date, "%Y-%m-%d") if query_date else datetime.now()
-            deadline_dt = incident_dt + timedelta(days=rule["years"] * 365)
+            # 按"年"加而非 365 天/年，避免闰年累计误差影响"是否刚好过期"的边界判断。
+            deadline_dt = _add_years(incident_dt, rule["years"])
             days_remaining = (deadline_dt - query_dt).days
 
             return {
@@ -277,6 +331,68 @@ class LegalTools:
             }
         except ValueError as e:
             return {"error": f"日期格式错误: {e}，请使用 YYYY-MM-DD 格式"}
+
+
+# ---- Phase 1 固定多跳检索（评估用占位实现）----
+
+def fixed_multihop_retrieve(llm_complete, tool: RetrieveTool, question: str,
+                            per_hop_top_k: int) -> Dict:
+    """Phase 1 固定多跳检索占位实现(eval_multihop.py --mode fixed 用)。
+
+    固定策略: LLM 拆成 2 个子问题 → 两跳检索 → 去重合并。
+    足够复现 phase1_fixed_multihop.json 结果,不求完美(Agent 已超过它)。
+
+    Args:
+        llm_complete: LegalRAG._complete 方法(用于调 LLM 拆子问题)
+        tool: RetrieveTool 实例(用于检索)
+        question: 原问题
+        per_hop_top_k: 每跳检索条数
+
+    Returns:
+        {"merged": 合并去重后的 hits, "hops": 跳数, "subs": 子问题列表}
+    """
+    # 简化版拆解 prompt:固定拆 2 个子问题
+    subs_prompt = (
+        f"把下面这个法律问题拆解成 2 个具体的子问题,每行一个,直接输出子问题不要编号:\n"
+        f"{question}"
+    )
+    try:
+        subs_raw = llm_complete(
+            messages=[{"role": "user", "content": subs_prompt}],
+            temperature=0,
+        )
+        # 解析子问题(去掉编号、空行)
+        import re
+        lines = subs_raw.strip().split('\n')
+        subs = []
+        for line in lines:
+            line = re.sub(r'^[-*•\d+.)\s]+', '', line).strip()  # 去编号
+            if line and len(line) > 3:
+                subs.append(line)
+        # 容错:拆解失败则用原问题 + 简化版
+        if not subs:
+            subs = [question]
+        elif len(subs) == 1:
+            subs.append(question)  # 只拆出 1 个,补原问题作第二跳
+        subs = subs[:2]  # 固定两跳
+    except Exception:
+        # LLM 调用失败:降级为单跳
+        subs = [question]
+
+    # 逐跳检索 → 累积
+    all_hits = []
+    for sub in subs:
+        hits = tool.search(sub, top_k=per_hop_top_k)
+        all_hits.extend(hits)
+
+    # 去重合并(按 law_name + article_no)
+    merged = merge_dedup_hits([all_hits])
+
+    return {
+        "merged": merged,
+        "hops": len(subs),
+        "subs": subs,
+    }
 
 
 # 全局单例（避免重复构建引用图）

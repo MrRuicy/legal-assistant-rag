@@ -19,19 +19,23 @@ from .rag import LegalRAG, _strip_law_prefix
 from .agent import LegalAgent
 
 
-# 简洁现代风：大留白、大圆角、单一灰阶、几乎无边框
+# 浅色清雅风：暖米白底 + 墨蓝点缀 + 书卷气，留白克制、层次柔和
 CUSTOM_CSS = """
 :root {
-    --bg: #f7f7f8;
+    --bg: #f5f3ef;
     --surface: #ffffff;
-    --border: #ebebed;
-    --text: #18181b;
-    --muted: #71717a;
-    --accent: #18181b;
+    --surface-alt: #faf9f7;
+    --border: #e7e3da;
+    --text: #1c2733;
+    --muted: #6b7280;
+    --accent: #1e3a5f;
+    --accent-soft: #2c5282;
+    --accent-wash: #eef2f7;
+    --gold: #b08d57;
     --chip-bg: #ffffff;
-    --chip-border: #e4e4e7;
-    --chip-bg-hover: #f4f4f5;
-    --link: #1f2937;
+    --chip-border: #e7e3da;
+    --chip-bg-hover: #f3f1ec;
+    --link: #1e3a5f;
 }
 
 /* 自适应视口：宽度按比例 + 上限，避免写死；高度按视口 95% 留出底部余量 */
@@ -40,19 +44,20 @@ body { margin: 0; padding: 0; overflow-x: hidden; overflow-y: auto; }
     width: 94% !important;
     max-width: 1080px !important;
     margin: 0 auto !important;
-    padding: 10px 0 12px 0 !important;
+    padding: 14px 0 12px 0 !important;
     min-height: 100vh;
 }
 body, .gradio-container {
-    background: var(--bg) !important;
+    background: linear-gradient(180deg, #f7f5f1 0%, #efece6 100%) !important;
+    background-attachment: fixed !important;
     color: var(--text) !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif !important;
 }
 
-/* 顶栏：极简，压缩上下边距 */
-#app-header { text-align: left; margin: 0 2px 10px 2px; padding: 0; }
-#app-header h1 { margin: 0; font-size: 1.35rem; font-weight: 650; letter-spacing: -0.015em; }
-#app-header p { margin: 2px 0 0 0; color: var(--muted); font-size: 0.82rem; font-weight: 400; }
+/* 顶栏：清雅，标题用衬线体强化书卷气，下加渐变分隔线 */
+#app-header { text-align: left; margin: 0 2px 14px 2px; padding: 0 0 12px 0; border-bottom: 1px solid transparent; border-image: linear-gradient(90deg, var(--accent) 0%, rgba(176,141,87,0.35) 38%, transparent 100%) 1; }
+#app-header h1 { margin: 0; font-size: 1.45rem; font-weight: 650; letter-spacing: -0.01em; color: var(--accent); font-family: "Noto Serif SC", "Songti SC", "STSong", serif !important; }
+#app-header p { margin: 4px 0 0 0; color: var(--muted); font-size: 0.83rem; font-weight: 400; letter-spacing: 0.01em; }
 
 /* ── 对话外壳：相对定位容器，输入区/示例 chips 悬浮其内；高度按视口比例，确保输入框不被遮挡 ── */
 #chat-shell {
@@ -61,34 +66,40 @@ body, .gradio-container {
     min-height: 420px;
 }
 
-/* 对话区：填满外壳，大圆角弱描边 */
+/* 对话区：填满外壳，柔圆角暖描边，多层柔和阴影 */
 #chatbot {
     position: absolute !important;
     inset: 0 !important;
     height: 100% !important;
     border: 1px solid var(--border) !important;
-    border-radius: 20px !important;
-    background: var(--surface) !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03) !important;
+    border-radius: 18px !important;
+    background: var(--surface-alt) !important;
+    box-shadow: 0 1px 2px rgba(28,39,51,0.03), 0 8px 24px rgba(28,39,51,0.05) !important;
 }
 /* 给消息列表底部留白，避免最后一条被悬浮输入框遮住 */
-#chatbot .message-wrap, #chatbot .bubble-wrap { padding-bottom: 96px !important; gap: 16px !important; }
-#chatbot .message { font-size: 0.95rem; line-height: 1.72; border: none !important; }
+#chatbot .message-wrap, #chatbot .bubble-wrap { padding-bottom: 96px !important; gap: 18px !important; }
+#chatbot .message { font-size: 0.95rem; line-height: 1.78; border: none !important; }
 #chatbot .message.user, #chatbot .message.user * {
-    background: #1f2937 !important;
+    background: var(--accent) !important;
     color: #ffffff !important;
 }
 #chatbot .message.user {
     border-radius: 16px 16px 4px 16px !important;
-    padding: 10px 14px !important;
+    padding: 11px 15px !important;
+    box-shadow: 0 2px 8px rgba(30,58,95,0.16) !important;
 }
+/* AI 气泡：极淡白卡片 + 暖描边，营造"纸面"书卷质感 */
 #chatbot .message.bot {
-    background: transparent !important;
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
     border-radius: 4px 16px 16px 16px !important;
+    padding: 12px 16px !important;
+    box-shadow: 0 1px 3px rgba(28,39,51,0.04) !important;
 }
 #chatbot .message.bot a { color: var(--link) !important; }
+#chatbot .message.bot strong, #chatbot .message.bot b { color: var(--accent) !important; font-weight: 650; }
 
-/* ── 悬浮输入区：贴外壳底部（而非对话框底部），毛玻璃卡片，居中且左右对齐对话框 ── */
+/* ── 悬浮输入区：贴外壳底部，毛玻璃卡片，聚焦时墨蓝光晕 ── */
 #input-row {
     position: absolute !important;
     left: 50%;
@@ -99,13 +110,18 @@ body, .gradio-container {
     z-index: 6;
     gap: 8px !important;
     align-items: center !important;
-    background: rgba(255,255,255,0.95) !important;
+    background: rgba(255,255,255,0.96) !important;
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid var(--chip-border) !important;
     border-radius: 17px !important;
     padding: 6px 6px 6px 6px !important;
-    box-shadow: 0 4px 18px rgba(0,0,0,0.07) !important;
+    box-shadow: 0 4px 20px rgba(28,39,51,0.08) !important;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease !important;
+}
+#input-row:focus-within {
+    border-color: var(--accent) !important;
+    box-shadow: 0 4px 22px rgba(30,58,95,0.16), 0 0 0 3px rgba(30,58,95,0.08) !important;
 }
 #input-row textarea {
     border: none !important;
@@ -119,25 +135,28 @@ body, .gradio-container {
 #send-btn {
     border-radius: 12px !important;
     font-weight: 600 !important;
-    background: #18181b !important;
+    background: linear-gradient(135deg, var(--accent-soft) 0%, var(--accent) 100%) !important;
     border: none !important;
     color: #fff !important;
-    padding: 0 16px !important;
+    padding: 0 18px !important;
     height: 38px !important;
+    box-shadow: 0 2px 8px rgba(30,58,95,0.22) !important;
+    transition: transform 0.13s ease, box-shadow 0.13s ease, filter 0.13s ease !important;
 }
-#send-btn:hover { background: #000 !important; }
+#send-btn:hover { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(30,58,95,0.3) !important; }
 #clear-btn {
     border-radius: 12px !important;
-    background: #f4f4f5 !important;
+    background: var(--surface-alt) !important;
     border: 1px solid var(--chip-border) !important;
     color: var(--muted) !important;
     font-weight: 500 !important;
     padding: 0 14px !important;
     height: 38px !important;
+    transition: all 0.13s ease !important;
 }
-#clear-btn:hover { background: #e9e9eb !important; }
+#clear-btn:hover { background: var(--chip-bg-hover) !important; color: var(--text) !important; }
 
-/* ── 深度模式开关：紧凑行，小字灰调 ── */
+/* ── 深度模式开关：紧凑行，墨蓝选中色 ── */
 #agent-mode-row {
     position: absolute !important;
     left: 50%;
@@ -160,6 +179,7 @@ body, .gradio-container {
 #agent-mode-checkbox input[type="checkbox"] {
     margin: 0 !important;
     cursor: pointer !important;
+    accent-color: var(--accent) !important;
 }
 
 /* ── 空状态：欢迎 + 示例 chips，悬浮于对话框中部（不占文档流高度）── */
@@ -173,8 +193,8 @@ body, .gradio-container {
     padding: 0 !important;
     text-align: center;
 }
-#examples-head { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 16px; }
-#examples-head .examples-title { color: var(--muted); font-size: 0.92rem; font-weight: 500; }
+#examples-head { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 18px; }
+#examples-head .examples-title { color: var(--accent); font-size: 1.02rem; font-weight: 500; font-family: "Noto Serif SC", "Songti SC", "STSong", serif !important; }
 #shuffle-btn {
     background: transparent !important;
     border: none !important;
@@ -187,7 +207,7 @@ body, .gradio-container {
     flex: 0 0 auto !important;
     border-radius: 8px !important;
 }
-#shuffle-btn:hover { background: var(--chip-bg-hover) !important; color: var(--text) !important; }
+#shuffle-btn:hover { background: var(--chip-bg-hover) !important; color: var(--accent) !important; }
 
 /* chips 容器：居中、单行自动换行，chip 等高、宽度随内容、不被拉伸 */
 #chips-row { display: flex !important; flex-wrap: wrap !important; justify-content: center !important; gap: 9px !important; }
@@ -196,6 +216,7 @@ body, .gradio-container {
     background: var(--chip-bg) !important;
     color: var(--text) !important;
     border: 1px solid var(--chip-border) !important;
+    border-left: 2px solid var(--accent) !important;
     border-radius: 999px !important;
     padding: 9px 16px !important;
     height: auto !important;
@@ -203,14 +224,15 @@ body, .gradio-container {
     font-weight: 400 !important;
     line-height: 1.4 !important;
     white-space: nowrap !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
-    transition: all 0.13s ease !important;
+    box-shadow: 0 1px 2px rgba(28,39,51,0.04) !important;
+    transition: all 0.14s ease !important;
 }
 #chips-row button:hover {
-    background: var(--chip-bg-hover) !important;
-    border-color: #d4d4d8 !important;
+    background: var(--accent-wash) !important;
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.07) !important;
+    box-shadow: 0 3px 10px rgba(30,58,95,0.12) !important;
 }
 
 /* ── 答案页脚：校验徽章 + 引用条文（整体可折叠），内联在每条回答末尾 ── */
@@ -218,38 +240,50 @@ body, .gradio-container {
 
 /* 引用校验徽章：克制 */
 .verify-badge { border-radius: 12px; padding: 9px 13px; line-height: 1.5; font-size: 0.84rem; margin-bottom: 9px; border: 1px solid; }
-.verify-badge.ok { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
-.verify-badge.warn { background: #fffbeb; border-color: #fde68a; color: #b45309; }
-.verify-badge.none { background: #f9fafb; border-color: #e5e7eb; color: #52525b; }
+.verify-badge.ok { background: #f1f8f4; border-color: #c6e6d2; color: #2f7d52; }
+.verify-badge.warn { background: #fcf7ec; border-color: #ecdcb0; color: #9a6a1f; }
+.verify-badge.none { background: var(--surface-alt); border-color: var(--border); color: var(--muted); }
 .verify-badge b { font-weight: 650; }
 
-/* 引用条文整体折叠块 */
-.refs-block { background: #fbfbfc; border: 1px solid var(--border); border-radius: 14px; padding: 0; overflow: hidden; }
-.refs-block > summary { cursor: pointer; padding: 11px 15px; list-style: none; font-size: 0.86rem; font-weight: 600; color: var(--text); user-select: none; }
+/* 引用条文整体折叠块：墨蓝竖条标识层级 */
+.refs-block { background: var(--surface-alt); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 14px; padding: 0; overflow: hidden; }
+.refs-block > summary { cursor: pointer; padding: 11px 15px; list-style: none; font-size: 0.86rem; font-weight: 600; color: var(--accent); user-select: none; }
 .refs-block > summary::-webkit-details-marker { display: none; }
-.refs-block > summary .blk-arrow { color: var(--muted); font-size: 0.72rem; margin-right: 7px; display: inline-block; transition: transform 0.15s; }
+.refs-block > summary .blk-arrow { color: var(--gold); font-size: 0.72rem; margin-right: 7px; display: inline-block; transition: transform 0.15s; }
 .refs-block[open] > summary .blk-arrow { transform: rotate(90deg); }
 .refs-block[open] > summary { border-bottom: 1px solid var(--border); }
 .refs-block > summary .blk-count { color: var(--muted); font-weight: 400; margin-left: 5px; font-size: 0.8rem; }
 .refs-block .refs-inner { padding: 9px 10px 10px 10px; }
 
 /* 单条条文卡片（嵌套 details/summary） */
-.ref-item { background: var(--surface); border: 1px solid #f0f0f1; border-radius: 11px; margin-bottom: 7px; transition: border-color 0.15s; }
+.ref-item { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; margin-bottom: 7px; transition: border-color 0.15s, box-shadow 0.15s; }
 .ref-item:last-child { margin-bottom: 0; }
-.ref-item:hover { border-color: #e0e0e3; }
-.ref-item:target { border-color: #1f2937; box-shadow: 0 0 0 2px rgba(31,41,55,0.1); animation: anchor-flash 1.3s ease-out; }
-@keyframes anchor-flash { 0% { background: #fef9c3; } 100% { background: var(--surface); } }
+.ref-item:hover { border-color: var(--accent-soft); box-shadow: 0 2px 8px rgba(30,58,95,0.08); }
+.ref-item:target { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(30,58,95,0.14); animation: anchor-flash 1.4s ease-out; }
+@keyframes anchor-flash { 0% { background: var(--accent-wash); } 100% { background: var(--surface); } }
 .ref-item > summary { cursor: pointer; padding: 10px 13px; list-style: none; font-size: 0.875rem; line-height: 1.45; user-select: none; }
 .ref-item > summary::-webkit-details-marker { display: none; }
-.ref-item > summary .ref-title { font-weight: 600; color: var(--text); }
+.ref-item > summary .ref-title { font-weight: 600; color: var(--accent); }
 .ref-item > summary .ref-meta { display: block; color: var(--muted); font-size: 0.76rem; margin-top: 3px; }
-.ref-item > summary .ref-arrow { float: right; color: var(--muted); transition: transform 0.15s; font-size: 0.72rem; margin-top: 3px; }
+.ref-item > summary .ref-arrow { float: right; color: var(--gold); transition: transform 0.15s; font-size: 0.72rem; margin-top: 3px; }
 .ref-item[open] > summary .ref-arrow { transform: rotate(90deg); }
-.ref-item .ref-body { padding: 9px 13px 11px 13px; color: #3f3f46; font-size: 0.875rem; line-height: 1.72; border-top: 1px solid #f4f4f5; margin: 2px 0 0 0; }
+.ref-item .ref-body { padding: 9px 13px 11px 13px; color: #3f4b58; font-size: 0.875rem; line-height: 1.72; border-top: 1px solid var(--border); margin: 2px 0 0 0; }
 
-/* 答案中的条号锚点链接 */
-.cite-link { color: var(--link); text-decoration: none; border-bottom: 1px dashed #a1a1aa; padding: 0 1px; transition: all 0.12s; }
-.cite-link:hover { color: #000; border-bottom-color: #1f2937; background: #f4f4f5; border-radius: 3px; }
+/* 答案中的条号锚点链接：墨蓝实线下划，hover 墨蓝 wash 底 */
+.cite-link { color: var(--link); text-decoration: none; border-bottom: 1px solid rgba(30,58,95,0.4); padding: 0 1px; transition: all 0.12s; }
+.cite-link:hover { color: var(--accent); border-bottom-color: var(--accent); background: var(--accent-wash); border-radius: 3px; }
+
+/* ── 等待状态行：墨蓝呼吸圆点 + 文字，回答到达即被替换 ── */
+.status-line { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 0.9rem; padding: 2px 0; }
+.status-line .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    animation: status-pulse 1.1s ease-in-out infinite;
+}
+@keyframes status-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.85); }
+    50% { opacity: 1; transform: scale(1.15); }
+}
 
 footer { display: none !important; }
 """
@@ -397,7 +431,12 @@ def _trace_block_html(trace: List[Dict]) -> str:
         elif node == "answer":
             n = t.get("n_context", 0)
             lines.append(f"<b>作答</b>：基于 {n} 条法律条文生成答案")
-    body = "<br>".join(f'<div style="padding:3px 0;font-size:0.84rem;line-height:1.6;">{ln}</div>' for ln in lines)
+    body = "<br>".join(
+        f'<div style="padding:3px 0;font-size:0.84rem;line-height:1.6;">'
+        f'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;'
+        f'background:#1e3a5f;margin-right:8px;vertical-align:middle;"></span>{ln}</div>'
+        for ln in lines
+    )
     return (
         '<details class="refs-block" style="margin-bottom:9px;">'
         "<summary>"
@@ -472,11 +511,13 @@ def create_app():
         """流式回调（单栏）。
 
         agent_mode=False（默认）：单跳，调用 rag.answer_stream 流式输出。
-        agent_mode=True：多跳 Agent，调用 agent.run_stream（分阶段 yield）。
+        agent_mode=True：多跳 Agent，调用 agent.run_stream（逐节点实时 yield 轨迹）。
 
-        校验徽章与引用条文不再走独立侧栏，而是在流式结束后作为页脚 HTML
-        追加进当前 assistant 消息内容里。Agent 模式额外在页脚前插入轨迹折叠块。
-        refs_state 仍维护每条回答的快照，供 👍/👎 反馈按消息索引回查上下文落盘。
+        交互优化：
+        - 用户气泡与空 AI 气泡已由前置步骤 _show_pending 即时插入（回车秒现），
+          这里直接复用末尾的空 assistant 气泡填充，不再重复 append。
+        - 等待期间 AI 气泡显示呼吸状态行（检索中…/思考中…），有内容即替换。
+        - Agent 模式轨迹随节点实时累积渲染（像 DeepSeek 思考过程）。
 
         Yields:
             (history, refs_state)
@@ -485,10 +526,9 @@ def create_app():
             yield history, refs_state
             return
 
-        prior_history = list(history)
+        # 前置步骤已 append [user, assistant=""]；prior_history 取这两条之前的对话
+        prior_history = list(history[:-2]) if len(history) >= 2 else []
 
-        history.append({"role": "user", "content": question})
-        history.append({"role": "assistant", "content": ""})
         refs_hits: List[Dict] = []
         answer_parts: List[str] = []
         last_verify: Optional[Dict] = None
@@ -496,32 +536,45 @@ def create_app():
         rewrite_used: Optional[str] = None
         trace_list: List[Dict] = []  # Agent 模式独有
 
-        def _compose(linkify: bool) -> str:
-            """把答案正文 + 免责声明 + 轨迹(Agent) + 页脚拼成消息内容。"""
-            ans = "".join(answer_parts)
-            if linkify:
-                ans = _linkify_citations(ans, refs_hits)
-            body = ans
-            if disclaimer_md:
-                body += f"\n\n---\n\n{disclaimer_md}"
-            # Agent 模式：在页脚前先插入轨迹折叠块
+        def _status_html(text: str) -> str:
+            """呼吸状态行：等待期间占位，回答到达即被正文替换。"""
+            return f'<div class="status-line"><span class="status-dot"></span>{escape(text)}</div>'
+
+        def _compose(linkify: bool, status: str = "") -> str:
+            """把（轨迹 + 状态行 + 答案正文 + 免责 + 页脚）拼成消息内容。
+
+            轨迹在前（Agent 思考过程实时展示），状态行在答案未到时占位。
+            """
+            parts = []
+            # Agent 模式：轨迹折叠块放最前（实时累积）
             if agent_mode:
                 trace_html = _trace_block_html(trace_list)
                 if trace_html:
-                    body += f"\n\n{trace_html}"
+                    parts.append(trace_html)
+            ans = "".join(answer_parts)
+            if ans:
+                if linkify:
+                    ans = _linkify_citations(ans, refs_hits)
+                parts.append(ans)
+            elif status:
+                # 还没有正文 → 显示呼吸状态行
+                parts.append(_status_html(status))
+            body = "\n\n".join(parts)
+            if disclaimer_md:
+                body += f"\n\n---\n\n{disclaimer_md}"
             footer = _answer_footer_html(last_verify, refs_hits)
             if footer:
                 body += f"\n\n{footer}"
             return body
 
         if agent_mode:
-            # 多跳 Agent：非逐 token 流式，分阶段 yield（trace → refs → answer → verify → disclaimer）
+            # 多跳 Agent：逐节点实时 yield（trace 边跑边累积 → refs → answer → verify → disclaimer）
             for chunk in agent.run_stream(question, history=prior_history):
                 chunk_type = chunk.get("type")
                 if chunk_type == "trace":
                     trace_list = chunk.get("content", [])
-                    # trace 到齐后先 yield 一次（让前端尽早展示轨迹），正文暂空
-                    history[-1]["content"] = _compose(linkify=False)
+                    # 轨迹实时累积；正文未到时附呼吸状态行
+                    history[-1]["content"] = _compose(linkify=False, status="正在检索并推理…")
                     yield history, refs_state
                 elif chunk_type == "references":
                     refs_hits = chunk.get("content", [])
@@ -535,23 +588,30 @@ def create_app():
                     disclaimer_md = chunk.get("content", "")
             # 最终 linkify
             history[-1]["content"] = _compose(linkify=True)
-            refs_state.append({"hits": refs_hits, "verify": last_verify})
+            refs_state.append({"hits": refs_hits, "verify": last_verify,
+                               "question": question, "answer": "".join(answer_parts)})
             yield history, refs_state
         else:
-            # 单跳：原流式逻辑（逐 token）
+            # 单跳：逐 token 流式
             for chunk in rag.answer_stream(question, history=prior_history):
                 ctype = chunk["type"]
                 content = chunk["content"]
                 if ctype == "rewrite":
                     rewrite_used = content if isinstance(content, str) else None
+                    # 改写完成、检索尚未返回 → 显示检索中状态行
+                    history[-1]["content"] = _compose(linkify=False, status="正在检索相关条文…")
+                    yield history, refs_state
                     continue
                 elif ctype == "references":
                     refs_hits = content if isinstance(content, list) else []
+                    # 检索完成、首 token 未到 → 显示生成中状态行
+                    history[-1]["content"] = _compose(linkify=False, status="正在生成回答…")
+                    yield history, refs_state
                     continue
                 elif ctype == "answer":
                     if isinstance(content, str):
                         answer_parts.append(content)
-                    history[-1]["content"] = "".join(answer_parts)
+                    history[-1]["content"] = _compose(linkify=False)
                     yield history, refs_state
                 elif ctype == "verify":
                     last_verify = content if isinstance(content, dict) else None
@@ -634,7 +694,7 @@ def create_app():
             init_qs = _sample_questions()
             with gr.Column(elem_id="examples-wrap", visible=True) as examples_wrap:
                 with gr.Row(elem_id="examples-head"):
-                    gr.HTML('<div class="examples-title">💡 试试这些问题</div>')
+                    gr.HTML('<div class="examples-title">⚖ 不妨从这些问题开始</div>')
                     shuffle_btn = gr.Button("🔄 换一换", elem_id="shuffle-btn", size="sm")
                 with gr.Row(elem_id="chips-row"):
                     example_btns = [
@@ -671,25 +731,39 @@ def create_app():
             """把输入框内容转存到 state，并立即清空输入框。"""
             return q, "", gr.update(visible=False)
 
+        def _show_pending(question: str, history: list):
+            """即时插入「用户气泡 + 空 AI 气泡」并立即返回，让气泡秒现（问题1）。
+            随后 chat_stream 复用末尾这条空 assistant 气泡填充内容。"""
+            if question.strip():
+                history = history + [
+                    {"role": "user", "content": question},
+                    {"role": "assistant", "content": ""},
+                ]
+            return history
+
         def _shuffle():
             """重抽示例问题，更新各 chip 的文案。"""
             qs = _sample_questions()
             return [gr.update(value=q) for q in qs]
 
-        # 提交链：先清空输入框 → 再流式回答（回车/点击后问题立即消失）
+        # 提交链：清空输入框 → 即时插气泡 → 流式回答（回车后用户气泡瞬现）
         for trigger in (submit_btn.click, question_input.submit):
             trigger(
                 _stash, inputs=[question_input], outputs=[question_store, question_input, examples_wrap]
+            ).then(
+                _show_pending, inputs=[question_store, chatbot], outputs=[chatbot]
             ).then(
                 chat_stream,
                 inputs=[question_store, chatbot, refs_state, agent_mode_state],
                 outputs=[chatbot, refs_state],
             )
 
-        # 示例 chip：点击把自身文案转存 → 清空输入框 → 流式回答
+        # 示例 chip：点击转存 → 清空输入框 → 即时插气泡 → 流式回答
         for btn in example_btns:
             btn.click(
                 _stash, inputs=[btn], outputs=[question_store, question_input, examples_wrap]
+            ).then(
+                _show_pending, inputs=[question_store, chatbot], outputs=[chatbot]
             ).then(
                 chat_stream,
                 inputs=[question_store, chatbot, refs_state, agent_mode_state],

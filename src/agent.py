@@ -30,8 +30,7 @@ from .tools import (
     RetrieveTool,
     merge_dedup_hits,
     format_articles_context,
-    decompose_query,
-    _parse_str_list,
+    _normalize_article_no,
 )
 
 
@@ -219,61 +218,78 @@ def _reflect_node(rag: LegalRAG, tools):
         # 去掉已查过的，避免重复
         missing = [m for m in missing if m not in asked]
 
-        # Phase 3: 工具补全（交叉引用 + 时效计算）——能用工具直接解决的就不走检索
+        # Phase 3: 工具补全（交叉引用 + 时效计算）——能用工具直接解决的就不走检索。
+        # 每个工具调用都包 try/except：工具内部异常绝不能冒泡打挂整条 Agent 链，
+        # 失败时该 miss 退回普通检索（below），不阻断作答。
         tool_resolved_missing = []
         tool_added_hits = []
         for miss in missing:
-            # 工具1：交叉引用 - 匹配 "第X条" / "《XX法》第Y条"
-            match = re.search(r'《([^》]+)》第(\d+)条|第(\d+)条', miss)
-            if match:
-                law = match.group(1) if match.group(1) else ""
-                article = match.group(2) if match.group(2) else match.group(3)
-                # 如果没明确法律名，从已有 hits 推断（取第一个 hit 的法律名）
-                if not law and hits:
-                    law = hits[0].get("law_name", "")
-                if law and article:
-                    article_id = f"{law}#{article}"
-                    refs = tools.lookup_referenced_articles(article_id, max_depth=1)
-                    if refs:
-                        tool_resolved_missing.append(miss)
-                        tool_added_hits.extend(refs)
-                        continue  # 已处理，跳过后续检查
+            try:
+                # 工具1：交叉引用 - 仅当 miss 本身是「干净条号引用」时才走工具。
+                # 长语义子问题（碰巧含条号）走普通检索，避免短路语义召回（Phase 3 评估教训）。
+                if _is_clean_article_ref(miss):
+                    # 匹配 "《XX法》第Y条" / "第X条"（阿拉伯或中文数字），容忍空格。
+                    match = re.search(
+                        r'《([^》]+)》\s*第\s*([0-9一二三四五六七八九十百千零两]+)\s*条'
+                        r'|第\s*([0-9一二三四五六七八九十百千零两]+)\s*条',
+                        miss,
+                    )
+                else:
+                    match = None
+                if match:
+                    law = match.group(1) or ""
+                    article_raw = match.group(2) or match.group(3)
+                    article = _normalize_article_no(article_raw)
+                    # 如果没明确法律名，从已有 hits 推断（取第一个 hit 的法律名）
+                    if not law and hits:
+                        law = hits[0].get("law_name", "")
+                    if law and article:
+                        article_id = f"{law}#{article}"
+                        # 正解：Reflect 说"缺第X条"是要第X条的原文本身（连带其引用），
+                        # 而非它引用的条文。get_article 返回该条本身 + 直接引用。
+                        added = tools.get_article(article_id, with_references=True)
+                        if added:
+                            tool_resolved_missing.append(miss)
+                            tool_added_hits.extend(added)
+                            continue  # 已处理，跳过后续检查
 
-            # 工具2：时效计算 - 匹配 "时效计算：<类型>，事件日期<YYYY-MM-DD>"
-            time_match = re.search(r'时效计算[：:]\s*([^，,]+)[，,]\s*事件日期\s*(\d{4}-\d{2}-\d{2})', miss)
-            if time_match:
-                case_type_raw = time_match.group(1).strip()
-                incident_date = time_match.group(2)
-                # 映射中文类型到工具参数
-                case_type_map = {
-                    "劳动争议": "labor", "劳动": "labor", "劳动仲裁": "labor",
-                    "民事": "civil", "民事诉讼": "civil",
-                    "刑事": "criminal", "刑事案件": "criminal"
-                }
-                case_type = case_type_map.get(case_type_raw, "civil")  # 默认民事
-                result = tools.calculate_statute_of_limitations(case_type, incident_date)
-                if "error" not in result:
-                    # 将时效计算结果转成虚拟"条文"格式，注入上下文
-                    virtual_hit = {
-                        "law_name": "时效计算结果",
-                        "article_no": "自动计算",
-                        "article_text": (
-                            f"案件类型：{case_type_raw}\n"
-                            f"时效期限：{result['limitation_years']}年\n"
-                            f"诉讼时效截止日期：{result['deadline']}\n"
-                            f"是否已过期：{'是' if result['is_expired'] else '否'}\n"
-                            f"剩余天数：{result['days_remaining']}天\n"
-                            f"法律依据：{result['legal_basis']}\n"
-                            f"注意：{result['note']}"
-                        )
+                # 工具2：时效计算 - 匹配 "时效计算：<类型>，事件日期<YYYY-MM-DD>"
+                time_match = re.search(r'时效计算[：:]\s*([^，,]+)[，,]\s*事件日期\s*(\d{4}-\d{2}-\d{2})', miss)
+                if time_match:
+                    case_type_raw = time_match.group(1).strip()
+                    incident_date = time_match.group(2)
+                    # 映射中文类型到工具参数
+                    case_type_map = {
+                        "劳动争议": "labor", "劳动": "labor", "劳动仲裁": "labor",
+                        "民事": "civil", "民事诉讼": "civil",
+                        "刑事": "criminal", "刑事案件": "criminal"
                     }
-                    tool_resolved_missing.append(miss)
-                    tool_added_hits.append(virtual_hit)
+                    case_type = case_type_map.get(case_type_raw, "civil")  # 默认民事
+                    result = tools.calculate_statute_of_limitations(case_type, incident_date)
+                    if "error" not in result:
+                        # 将时效计算结果转成虚拟"条文"格式，注入上下文
+                        virtual_hit = {
+                            "law_name": "时效计算结果",
+                            "article_no": "自动计算",
+                            "article_text": (
+                                f"案件类型：{case_type_raw}\n"
+                                f"时效期限：{result['limitation_years']}年\n"
+                                f"诉讼时效截止日期：{result['deadline']}\n"
+                                f"是否已过期：{'是' if result['is_expired'] else '否'}\n"
+                                f"剩余天数：{result['days_remaining']}天\n"
+                                f"法律依据：{result['legal_basis']}\n"
+                                f"注意：{result['note']}"
+                            )
+                        }
+                        tool_resolved_missing.append(miss)
+                        tool_added_hits.append(virtual_hit)
+            except Exception:
+                # 工具失败：不解决该 miss，留给下方普通检索兜底
+                continue
 
         # 工具补全的 hits 合并到状态（去重）
         if tool_added_hits:
-            from .tools import merge_dedup_hits
-            hits = merge_dedup_hits(hits + tool_added_hits)
+            hits = merge_dedup_hits([hits, tool_added_hits])
 
         # 移除工具已解决的 missing，剩下的才需要检索
         missing = [m for m in missing if m not in tool_resolved_missing]
@@ -309,6 +325,11 @@ def _answer_node(rag: LegalRAG):
                 "verify": {"status": "none", "cited": [], "fabricated": [], "message": "无检索结果。"},
             }
 
+        # 多跳累积的条文去重后可能很多 → 截断到 AGENT_MAX_CONTEXT，控制上下文长度与成本。
+        # hits 已按召回先后去重，靠前的更相关，故直接取前 N 条。
+        if len(hits) > config.AGENT_MAX_CONTEXT:
+            hits = hits[:config.AGENT_MAX_CONTEXT]
+
         # 复用 LegalRAG 的 system prompt 与上下文格式（含法律名、强制引用、免责）
         context = format_articles_context(hits)
         system_prompt = rag._system_prompt(hits)
@@ -327,7 +348,7 @@ def _answer_node(rag: LegalRAG):
 
         trace = state.get("trace", [])
         trace.append({"node": "answer", "n_context": len(hits)})
-        return {"answer": answer_text, "verify": verify, "trace": trace}
+        return {"answer": answer_text, "verify": verify, "hits": hits, "trace": trace}
     return node
 
 
@@ -345,6 +366,30 @@ def _route_after_reflect(state: AgentState) -> str:
 
 
 # ---- 辅助 ----
+
+def _is_clean_article_ref(miss: str) -> bool:
+    """判断 miss 是否是「干净的条号引用」（应走交叉引用工具），而非长语义子问题。
+
+    背景（Phase 3 评估暴露的问题）：交叉引用工具用 re.search 在整个 miss 里找「第X条」，
+    导致 Reflect 输出的长语义子问题（只是碰巧提到条号，如「第1038条提及的赔偿责任如何
+    结合第1182条计算」）被误判为可用条号工具解决，短路掉本该走的语义检索 → Coverage 塌方。
+
+    判据：去掉法律名《…》、条号「第X条(之N)(第Y款)」、标点空格后，剩余实质字符 ≤ 3。
+    即 miss 通篇就是在指一条/几条具体条文，没有额外的语义查询意图。
+    """
+    s = miss.strip()
+    if not s:
+        return False
+    # 去掉书名号法律名
+    s = re.sub(r'《[^》]+》', '', s)
+    # 去掉条号引用：第X条、第X条之一、第X条第Y款/项
+    s = re.sub(r'第\s*[0-9一二三四五六七八九十百千零两]+\s*条'
+               r'(之[一二三四五六七八九十]+)?'
+               r'(第?\s*[0-9一二三四五六七八九十]+\s*[款项])?', '', s)
+    # 去掉常见连接词与标点
+    s = re.sub(r'[、，,。；;：:\s和与及关于的（）()]', '', s)
+    return len(s) <= 3
+
 
 def _parse_obj(raw: str) -> Dict:
     """从 LLM 输出抠出 JSON 对象（容忍 ```json 围栏与前后噪声）。"""
@@ -421,7 +466,8 @@ class LegalAgent:
         }
 
     def run_stream(self, question: str, history: List[Dict] = None):
-        """流式包装器：把非流式的 Agent 图拆成阶段性 yield（供 Web 使用）。
+        """流式包装器：用 graph.stream 逐节点实时 yield，让多跳轨迹像「思考过程」
+        一样边跑边冒出来（而非整图跑完才一次性出现）。
 
         Yields:
             Dict，每个 chunk:
@@ -429,19 +475,40 @@ class LegalAgent:
                 "type": "trace" | "references" | "answer" | "verify" | "disclaimer",
                 "content": ...
             }
-        先 yield trace（让前端尽早展示规划轨迹），再 yield references / answer / verify / disclaimer
-        （与单跳 answer_stream 口径对齐，便于 web.py 统一处理）。
+        - 每个节点（planner/retrieve/reflect）跑完即 yield 一次累积 trace，前端实时重绘轨迹。
+        - answer 节点跑完再 yield references / answer / verify / disclaimer。
+        与单跳 answer_stream 口径对齐，便于 web.py 统一处理。
         """
-        result = self.run(question, history)
-        # 1. 先 yield trace（Agent 独有，展示多跳轨迹）
-        yield {"type": "trace", "content": result.get("trace", [])}
-        # 2. yield references（与单跳对齐）
-        yield {"type": "references", "content": result.get("references", [])}
-        # 3. 答案一次性 yield（非逐 token，但前端已习惯收到完整文本后渲染）
-        yield {"type": "answer", "content": result.get("answer", "")}
-        # 4. yield verify + disclaimer
-        yield {"type": "verify", "content": result.get("verify", {})}
-        yield {"type": "disclaimer", "content": result.get("disclaimer", "")}
+        trace_acc: List[Dict] = []      # 累积轨迹（增量拼接）
+        final_state: Dict = {}          # 最后一个节点的完整状态
+        try:
+            for chunk in self.graph.stream(
+                {"question": question, "history": history or []},
+                stream_mode="updates",
+            ):
+                # updates 模式：{node_name: 该节点返回的状态增量}
+                for node_name, delta in chunk.items():
+                    if not isinstance(delta, dict):
+                        continue
+                    final_state.update(delta)
+                    # 该节点若产出了新 trace 记录，累积并实时 yield
+                    node_trace = delta.get("trace")
+                    if node_trace:
+                        trace_acc = node_trace  # trace 在状态里是全量累积的，直接用最新值
+                        yield {"type": "trace", "content": list(trace_acc)}
+        except Exception:
+            # 图执行异常：退回非流式，至少给出已有结果（不阻断作答）
+            final_state = self.graph.invoke(
+                {"question": question, "history": history or []}
+            )
+            if final_state.get("trace"):
+                yield {"type": "trace", "content": list(final_state["trace"])}
+
+        # 节点跑完后，yield references / answer / verify / disclaimer
+        yield {"type": "references", "content": final_state.get("hits", [])}
+        yield {"type": "answer", "content": final_state.get("answer", "")}
+        yield {"type": "verify", "content": final_state.get("verify", {})}
+        yield {"type": "disclaimer", "content": self.rag._disclaimer()}
 
 
 if __name__ == "__main__":

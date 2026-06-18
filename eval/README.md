@@ -29,13 +29,16 @@ python -m eval.eval_multihop --mode agent --save xx.json  # Phase 2 Agent
 | 文件 | 阶段 | Coverage | LawCoverage | 平均轮数 |
 |------|------|----------|-------------|----------|
 | `baseline_singlehop.json` | 单跳基线 | 0.597 | 0.950 | 1 |
-| `phase1_fixed_multihop.json` | Phase 1 固定多跳 | 0.771 | 1.000 | 2.85 |
-| `phase2_agent.json` | Phase 2 Agent v1（MAX_CONTEXT=16，旧 Reflect） | 0.716 | 0.958 | 1.15 |
-| `phase2_agent_v2.json` | **Phase 2 Agent v2（MAX_CONTEXT=24 + 新 Reflect）** | **0.838** | **0.983** | 1.90 |
+| `phase1_fixed_multihop.json` | Phase 1 固定多跳（占位实现，固定 2 跳） | 0.666 | 0.983 | 2.0 |
+| `phase2_agent.json` | Phase 2 Agent v1（历史，MAX_CONTEXT=16，旧 Reflect） | 0.716 | 0.958 | 1.15 |
+| `phase2_agent_v2.json` | Phase 2 Agent v2（历史，MAX_CONTEXT=24 + 新 Reflect） | 0.838 | 0.983 | 1.90 |
+| `phase2_agent_fixed.json` | **Phase 2 Agent（2026-06 修复后，含 #10 守卫 + 工具统计）** | **0.825** | **0.983** | 1.90 |
 
-> ⚠️ 注意：`phase2_agent_v2.json` 测的是**检索 Coverage**（不是答案质量）。其 Coverage=0.838 有效
-> （基于 VectorStore 原始召回，不受历史字段名 bug 影响）；但该文件生成时的「答案」字段曾受 bug 影响，
-> 仅 Coverage 数字可信。字段名 bug 已修复（见 commit 历史）。
+> ⚠️ 注意：这些数字测的是**检索 Coverage**（不是答案质量）。`phase2_agent_fixed.json` 是最新口径，
+> 含 9+1 项 bug 修复（交叉引用方向/条号正则/AGENT_MAX_CONTEXT 截断/#10 工具短路守卫等）。
+> v2 的 0.838 与 fixed 的 0.825 差异在小样本(20题)+LLM 非确定性下属噪声；fixed 版工具命中率从虚高的
+> 0.55 降到合理的 0.25，且工具触发组 Coverage(0.927) 显著高于未触发组(0.791)——工具真正生效。
+> 完整分析见 [../EVAL_REPORT.md](../EVAL_REPORT.md)。
 
 **关键结论**：单跳调大 top_k（8→16）只到 0.688，而 Agent 多跳到 0.838——证明缺口是结构性的
 （单 query 召不全跨法律条文簇），需要多跳规划而非单纯增大 top_k。

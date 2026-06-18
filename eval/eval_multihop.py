@@ -96,11 +96,19 @@ def _retrieve_agent(question, top_k):
     # 轨迹里数 retrieve 节点的次数作为「实际检索轮数」
     rounds = sum(1 for t in final.get("trace", []) if t.get("node") == "retrieve")
     subs = []
+    # Phase 3: 从 trace 提取工具调用统计（交叉引用 / 时效计算）
+    tool_resolved = []      # 工具解决的 missing 列表
+    tool_added_hits = 0     # 工具补全的条文数
     for t in final.get("trace", []):
         if t.get("node") == "planner":
             subs = t.get("subs", [])
+        if t.get("node") == "reflect":
+            tool_resolved.extend(t.get("tool_resolved", []))
+            tool_added_hits += t.get("tool_added_hits", 0)
     return retrieved, laws, {"hops": rounds, "subs": subs, "n_hits": len(hits),
-                             "is_complex": final.get("is_complex")}
+                             "is_complex": final.get("is_complex"),
+                             "tool_resolved": tool_resolved,
+                             "tool_added_hits": tool_added_hits}
 
 
 _retrieve_agent._agent = None
@@ -165,6 +173,10 @@ def evaluate(top_k: int, mode: str = "single", save: str = None):
             extra = f" complex={trace.get('is_complex')}" if mode == "agent" else ""
             print(f"[{mode}] {q}\n   轮数={trace['hops']}{extra} 子问题={trace.get('subs')}\n"
                   f"   覆盖率={row['coverage']} 遗漏={missed}")
+        if mode == "agent":
+            # Phase 3: 工具调用统计入行
+            row["tool_resolved"] = trace.get("tool_resolved", [])
+            row["tool_added_hits"] = trace.get("tool_added_hits", 0)
         rows.append(row)
 
     n = len(cases)
@@ -176,6 +188,12 @@ def evaluate(top_k: int, mode: str = "single", save: str = None):
     print(f"  Hit:          {tot_hit / n:.3f}   (至少命中一条的题目比例)")
     print(f"  LawCoverage:  {tot_lawcov / n:.3f}   (期望涉及法律被触及比例)")
     print(f"  平均轮数:      {tot_hops / n:.2f}")
+    # Phase 3: Agent 模式额外打印工具调用统计
+    if mode == "agent":
+        n_triggered = sum(1 for r in rows if r.get("tool_resolved"))
+        n_tool_hits = sum(r.get("tool_added_hits", 0) for r in rows)
+        print(f"  工具命中率:    {n_triggered / n:.3f}   ({n_triggered}/{n} 题触发工具补全)")
+        print(f"  工具补全条数:  {n_tool_hits}   (交叉引用/时效计算累计补入)")
     print(f"{'='*64}")
 
     if mode == "single":
@@ -195,6 +213,10 @@ def evaluate(top_k: int, mode: str = "single", save: str = None):
             "law_coverage": round(tot_lawcov / n, 3),
             "avg_rounds": round(tot_hops / n, 2),
         }
+        if mode == "agent":
+            summary["tool_trigger_rate"] = round(
+                sum(1 for r in rows if r.get("tool_resolved")) / n, 3)
+            summary["tool_added_hits_total"] = sum(r.get("tool_added_hits", 0) for r in rows)
         with open(save, "w", encoding="utf-8") as f:
             json.dump({"summary": summary, "rows": rows}, f, ensure_ascii=False, indent=2)
         print(f"\n明细已保存到 {save}")

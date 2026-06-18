@@ -186,8 +186,15 @@ class LegalRAG:
                     timeout=config.LLM_TIMEOUT,  # 显式短超时，挂起调用快速切下一档
                 )
                 for chunk in stream:
-                    delta = chunk.choices[0].delta
-                    if delta.content:
+                    # 许多 OpenAI 兼容供应商（ModelScope/Qwen/GLM 等）会发 choices 为空列表的
+                    # chunk：流式收尾时只带 usage 统计，或中途发 role-only 空 chunk。
+                    # 直接 chunk.choices[0] 会 IndexError（表现为"list index out of range"，
+                    # 且因已产出内容而无法重试），故先判空跳过。
+                    choices = getattr(chunk, "choices", None)
+                    if not choices:
+                        continue
+                    delta = choices[0].delta
+                    if delta and delta.content:
                         produced = True
                         yield delta.content
                 return  # 正常流式完成
