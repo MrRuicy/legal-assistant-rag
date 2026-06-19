@@ -33,6 +33,8 @@ Laws/
 
 # 本地计划/会话文件
 .claude/
+memory/
+docs/
 
 # IDE
 .vscode/
