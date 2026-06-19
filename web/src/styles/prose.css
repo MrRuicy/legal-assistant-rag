@@ -1,0 +1,134 @@
+/* ============================================================
+   prose.css — 法律回答 Markdown 排版（变量驱动，跟随主题）
+   ============================================================ */
+
+.prose {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  line-height: 1.75;
+  word-break: break-word;
+}
+
+.prose > *:first-child {
+  margin-top: 0;
+}
+.prose > *:last-child {
+  margin-bottom: 0;
+}
+
+.prose p {
+  margin: 0.6em 0;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 1.1em 0 0.5em;
+  color: var(--text-primary);
+}
+.prose h1 {
+  font-size: 1.3rem;
+}
+.prose h2 {
+  font-size: 1.15rem;
+}
+.prose h3 {
+  font-size: 1.05rem;
+}
+
+.prose ul,
+.prose ol {
+  margin: 0.6em 0;
+  padding-left: 1.4em;
+}
+.prose ul {
+  list-style: disc;
+}
+.prose ol {
+  list-style: decimal;
+}
+.prose li {
+  margin: 0.3em 0;
+}
+.prose li::marker {
+  color: var(--accent);
+}
+
+.prose strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.prose a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+.prose a:hover {
+  border-bottom-color: var(--accent);
+}
+
+.prose blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 1em;
+  margin: 0.8em 0;
+  color: var(--text-secondary);
+}
+
+.prose code {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 0.85em;
+  background: var(--bg-surface-2);
+  padding: 0.15em 0.4em;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.prose pre {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1em;
+  overflow-x: auto;
+  margin: 0.8em 0;
+}
+.prose pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.8em 0;
+  font-size: 0.9rem;
+}
+.prose th,
+.prose td {
+  border: 1px solid var(--border);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+.prose th {
+  background: var(--bg-surface-2);
+  font-weight: 600;
+}
+
+/* 条号引用链接（《XX法》第X条 → 锚点跳转） */
+.prose .law-ref {
+  color: var(--accent);
+  cursor: pointer;
+  border-bottom: 1px dashed var(--accent);
+  font-weight: 500;
+}
+.prose .law-ref:hover {
+  background: var(--accent-soft);
+  border-radius: 4px;
+}

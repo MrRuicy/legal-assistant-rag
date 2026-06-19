@@ -37,7 +37,7 @@ def _tokenize(text: str) -> List[str]:
 
 class BM25Retriever:
     def __init__(self, articles: List[Dict], corpus: List[List[str]] = None):
-        """articles: 条文 dict 列表（同 civil_code.json 的元素结构）。
+        """articles: 条文 dict 列表（同 articles.json 的元素结构）。
 
         corpus 可传入预分词语料（来自磁盘缓存）以跳过 jieba 重建。
         """
@@ -57,7 +57,7 @@ class BM25Retriever:
     @classmethod
     def from_json(cls, json_path=None) -> "BM25Retriever":
         """从条文 JSON 构建；若磁盘有比 JSON 新的分词缓存则直接加载（免重新分词）。"""
-        json_path = Path(json_path or (config.DATA_PROCESSED_DIR / "civil_code.json"))
+        json_path = Path(json_path or (config.DATA_PROCESSED_DIR / "articles.json"))
         with open(json_path, encoding="utf-8") as f:
             articles = json.load(f)
 

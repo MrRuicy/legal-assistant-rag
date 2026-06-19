@@ -199,11 +199,3 @@ def save_to_json(articles: List[LawArticle], out_path: Path):
     with open(out_path, 'w', encoding='utf-8') as f:
         json.dump([asdict(a) for a in articles], f, ensure_ascii=False, indent=2)
 
-
-if __name__ == "__main__":
-    from . import config
-    articles = parse_all_civil_code(config.DATA_RAW_DIR)
-    print(f"解析完成：{len(articles)} 条")
-    save_to_json(articles, config.DATA_PROCESSED_DIR / "civil_code.json")
-    for a in articles[:3]:
-        print(f"\n[{a.part} / {a.chapter}] 第{a.article_no}条\n  {a.article_text[:60]}...")

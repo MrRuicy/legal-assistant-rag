@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# 密钥与环境
+.env
+*.key
+
+# 前端依赖与本地构建（镜像内由多阶段重新构建）
+web/node_modules/
+web/dist/
+web/dist-ssr/
+
+# 法律源仓库（构建产物已入库，运行不需要）
+Laws/
+
+# 运行时缓存与日志
+vector_store/_query_cache/
+data/feedback.jsonl
+*.log
+
+# 评估、文档、记忆（部署不需要）
+eval/
+docs/
+memory/
+.claude/
+
+# 版本控制与 IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# 图片
+*.png

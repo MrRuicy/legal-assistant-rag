@@ -1,0 +1,85 @@
+/* ============================================================
+   设计令牌 — CSS 变量驱动主题。深色玻璃态 / 科技专业。
+   两套主题：默认 dark，[data-theme="light"] 覆盖。
+   ============================================================ */
+
+:root,
+:root[data-theme='dark'] {
+  /* 背景层级 */
+  --bg-base: #0f1623; /* 页面背景 */
+  --bg-surface: #1a2234; /* 卡片 / 侧栏 */
+  --bg-surface-2: #141c2b; /* 输入区 / 次级表面 */
+  --bg-sidebar: #111827; /* 侧边栏底 */
+  --bg-elevated: #20293c; /* 浮层 / hover */
+
+  /* 边框 */
+  --border: #2a3444;
+  --border-strong: #3a4658;
+
+  /* 文字 */
+  --text-primary: #f0f4f8;
+  --text-secondary: #8fa3bf;
+  --text-tertiary: #5d6b82;
+
+  /* 强调色 */
+  --accent: #4f9ef8;
+  --accent-hover: #6cb0fa;
+  --accent-soft: rgba(79, 158, 248, 0.12);
+  --accent-grad-from: #4f9ef8;
+  --accent-grad-to: #6c63ff;
+
+  /* 语义色 */
+  --success: #22c55e;
+  --warning: #eab308;
+  --danger: #ef4444;
+  --success-soft: rgba(34, 197, 94, 0.14);
+  --warning-soft: rgba(234, 179, 8, 0.14);
+  --danger-soft: rgba(239, 68, 68, 0.14);
+
+  /* 圆角 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.45);
+
+  /* 字体 */
+  --font-sans: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+:root[data-theme='light'] {
+  --bg-base: #f5f7fa;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #eef1f6;
+  --bg-sidebar: #eceff4;
+  --bg-elevated: #ffffff;
+
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --text-primary: #1a2234;
+  --text-secondary: #5d6b82;
+  --text-tertiary: #94a3b8;
+
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-soft: rgba(59, 130, 246, 0.1);
+  --accent-grad-from: #4f9ef8;
+  --accent-grad-to: #6c63ff;
+
+  --success: #16a34a;
+  --warning: #ca8a04;
+  --danger: #dc2626;
+  --success-soft: rgba(22, 163, 74, 0.1);
+  --warning-soft: rgba(202, 138, 4, 0.1);
+  --danger-soft: rgba(220, 38, 38, 0.1);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.12);
+}

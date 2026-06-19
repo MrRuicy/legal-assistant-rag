@@ -1,33 +1,33 @@
+---
+title: 中国法律助手
+emoji: ⚖️
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+license: mit
+---
+
 # 中国法律助手 RAG 系统
 
-基于 RAG（检索增强生成）的中国法律法规智能问答系统。内置《中华人民共和国民法典》并精选接入刑法、公司法、劳动法、消费者权益保护法等 38 部常用法律法规（合计 5165 条），可继续扩充。
+基于 RAG（检索增强生成）的中国法律法规智能问答系统。内置《中华人民共和国民法典》+ 精选 38 部常用法律（合计 5165 条），支持多跳检索、引用校验、多轮对话。
 
-![Web 界面截图](webapp.png)
+![Web 界面截图](vue3.png)
 
-## 特性
+## 核心特性
 
-- ✅ **多法律覆盖**：民法典 + 精选刑事/商事/劳动/行政/诉讼等 38 部法律（5165 条），可按目录继续扩充
-- ✅ **混合检索**：向量召回 + BM25 关键词召回，加权 RRF 融合，兼顾语义与法律术语精确匹配
-- ✅ **多跳检索 Agent（深度模式）**：LangGraph 状态机（Planner/Retrieve/Reflect/Answer），对"被辞退能不能告、怎么告"这类多诉求问题自动拆解、多轮检索、反思补全——跨法律条文召回率 0.597→0.825。简单题自动走单跳快路径，不画蛇添足
-- ✅ **跨法律引用校验**：按「《法律名》第X条」核对引用，杜绝把甲法条号安到乙法上，醒目徽章标注
-- ✅ **准确引用**：答案强制写明法律名与条号（《中华人民共和国公司法》第X条）
-- ✅ **多轮对话**：支持追问，自动改写依赖上下文的问题（如"有无例外"→"诉讼时效的例外"）再检索
-- ✅ **流式输出**：回答逐字呈现，无需等待整段生成
-- ✅ **现代交互**：即时气泡(回车秒现) + 实时轨迹(深度模式逐节点展示) + 呼吸状态行 + 条号锚点跳转 + 浅色清雅 UI(墨蓝点缀书卷气)
-- ✅ **配额感知故障转移**：模型配额超限（429）时自动切换下一档，断路器记住已耗尽/限速的档直接跳过；显式超时防服务端挂起；末档可挂任意供应商真正兜底
-- ✅ **Query embedding 缓存**：相同问题的 query 向量本地缓存，省 embedding 配额、降首字延迟
-- ✅ **相关性闸门**：距离阈值拦截无关问题（如天气、菜谱），返回"未找到相关条文"
-- ✅ **反馈难例闭环**：内置 👍/👎 反馈按钮，落盘到 `data/feedback.jsonl`，可作难例集回灌评估
-- ✅ **双口径评估**：检索 Coverage（多跳召回率）+ 答案质量（LLM-as-judge 四维打分），单跳/Agent 可对比
-- ✅ **可切换 Embedding**：支持 ModelScope API 和 SiliconFlow API 两种供应商
-- ✅ **本地向量库**：ChromaDB 本地持久化，无需额外服务器
-- ✅ **合规设计**：内置免责声明，明确不构成法律建议
+- **多跳检索 Agent（深度模式）**：对"被辞退能不能告、怎么告"等多诉求问题自动拆解、多轮检索、反思补全——跨法律条文召回率从单跳 0.597 提升到 0.825。简单题自动走单跳快路径
+- **引用校验**：答案强制写明《法律名》第X条，按法律名核对，防止张冠李戴，醒目徽章标注
+- **混合检索**：向量召回 + BM25 关键词召回，RRF 融合，兼顾语义与法律术语精确匹配
+- **配额感知故障转移**：模型配额超限(429)自动切换下一档，断路器跳过已耗尽档位，末档可挂异构供应商兜底
+- **多轮对话**：支持追问，自动改写依赖上下文的问题（"有无例外"→"诉讼时效的例外"）再检索
+- **流式输出 + 现代交互**：即时气泡、深度模式实时轨迹、条号锚点跳转、浅色清雅 UI
+- **双口径评估**：检索 Coverage（多跳召回率）+ 答案质量（LLM-as-judge），单跳/Agent 可对比
+- **反馈闭环**：👍/👎 落盘到 feedback.jsonl，可作难例集回灌
 
 ## 快速开始
 
 ### 1. 安装依赖
-
-建议使用虚拟环境，并用清华镜像源加速：
 
 ```bash
 python -m venv .venv
@@ -37,290 +37,179 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 ### 2. 配置 API 密钥
 
-复制 `.env.example` 为 `.env`，填入你的 API 密钥：
-
 ```bash
 cp .env.example .env
 ```
 
-编辑 `.env`：
+编辑 `.env`，填入：
+
 ```ini
-# ModelScope（必填，用于 LLM）
-MODELSCOPE_API_KEY=your_modelscope_token_here
+# ModelScope（必填，LLM 生成）
+MODELSCOPE_API_KEY=your_token
 LLM_MODEL=deepseek-ai/DeepSeek-V4-Flash
 
-# 模型故障转移链（可选）：首选模型配额超限时按序自动切换。
-# 每档可以是「纯模型名」（继承主供应商 key/base_url），也可以是「模型|key|base_url」
-# 自带 API 的完整档位——把异构供应商放最后一档即可真正兜底，避免同一家全部 429 一起熄火。
-LLM_FALLBACK_MODELS=Qwen/Qwen3-Next-80B-A3B-Instruct,deepseek-ai/DeepSeek-V3.2,moonshotai/Kimi-K2.5,Qwen/Qwen3.5-122B-A10B,ZhipuAI/GLM-5.1,MiniMax/MiniMax-M2.5
-# 异构供应商兜底示例: LLM_FALLBACK_MODELS=...前面省略...,deepseek-chat|sk-xxxx|https://api.deepseek.com/v1
+# 故障转移链（可选，配额超限时按序切换）
+LLM_FALLBACK_MODELS=Qwen/Qwen3-Next-80B-A3B-Instruct,deepseek-ai/DeepSeek-V3.2
 
-# Embedding 供应商选择（推荐 siliconflow，ModelScope 免费额度较严）
+# Embedding 供应商（推荐 siliconflow，免费额度充足）
 EMBEDDING_PROVIDER=siliconflow
-
-# SiliconFlow（embedding 推荐，免费额度充足）
-SILICONFLOW_API_KEY=your_siliconflow_token_here
+SILICONFLOW_API_KEY=your_token
 ```
 
-**获取 API 密钥：**
-- ModelScope: [modelscope.cn](https://modelscope.cn) → 访问令牌
-- SiliconFlow: [cloud.siliconflow.cn](https://cloud.siliconflow.cn) → API 密钥
+**获取密钥**：[modelscope.cn](https://modelscope.cn)（访问令牌）、[cloud.siliconflow.cn](https://cloud.siliconflow.cn)（API 密钥）
 
-### 3. 初始化（首次运行）
+### 3. 初始化向量库
 
 ```bash
-python main.py setup
+python scripts/build_index.py
 ```
 
-这会：
-1. 解析法律文本：民法典（`data/raw/`）+ 精选目录（`src/law_catalog.py` 里在本地 `Laws/` 能找到的法律）
-2. 生成统一的 JSON 数据（`data/processed/civil_code.json`，含全部已接入法律）
-3. 调用 embedding API 构建向量库（存储在 `vector_store/`）
-4. 末尾打印向量库体积，超过 `VECTOR_STORE_WARN_MB`（默认 150MB）时提示
+会解析法律文本（民法典 + 精选目录，来自本地 `Laws/`）、调用 embedding API 构建向量库（存储在 `vector_store/`）。
 
-> 想接入更多法律，需先把 [LawRefBook/Laws](https://github.com/LawRefBook/Laws) 克隆到项目根的 `Laws/` 目录（该目录不随本仓库提交）。仅接入民法典时无需 `Laws/`，`data/raw/` 已自带。
+> 需先克隆 [LawRefBook/Laws](https://github.com/LawRefBook/Laws) 到项目根的 `Laws/` 目录。
+> 仓库已预置构建产物（`vector_store/` + `data/processed/articles.json`），仅运行服务无需此步。
 
-### 4. 启动 Web 服务
+### 4. 启动服务
 
 ```bash
-python main.py serve
+# 终端 1：后端
+python api.py        # FastAPI :8000
+
+# 终端 2：前端
+cd web
+npm install
+npm run dev          # Vue :5173
 ```
 
-默认访问地址：`http://localhost:7860`
+打开 http://localhost:5173
 
-## 界面特性
-
-### 浅色清雅设计（2026-06-19 改版）
-- **暖白米色背景** + **墨蓝点缀** (#1e3a5f)，书卷气克制，护眼柔和
-- 顶栏衬线体标题 + 墨蓝→金渐变分隔线
-- AI 回答「纸面卡片」质感(白底暖描边)，用户气泡墨蓝，对比清晰
-- 输入框聚焦墨蓝光晕，发送按钮墨蓝渐变 + hover 微动
-- 引用卡片墨蓝左边框层次标识，锚点跳转墨蓝渐隐高亮
-
-### 交互流式优化
-- **即时气泡**：回车后用户问题与空 AI 气泡瞬间出现，无等待感
-- **实时轨迹**（深度模式）：多跳检索过程逐节点实时呈现(规划→检索→反思→作答)，对标 DeepSeek 思考过程
-- **呼吸状态行**：等待期间显示「正在检索相关条文…」等阶段提示(墨蓝圆点呼吸动画)，有内容即替换
-
-### 核心功能
-- **深度模式开关**：简单题走单跳快路径，复杂题开启多跳 Agent(自动规划 + 反思补全)
-- **条号锚点跳转**：答案里的「《XX法》第X条」点击直达页脚引用卡片，条文可展开查看原文
-- **引用校验徽章**：自动检测答案引用是否在检索结果中，防止幻觉(张冠李戴/编造条号)，醒目标注
-- **多轮对话**：支持追问，自动改写依赖上下文的问题(「有无例外」→「诉讼时效的例外」)再检索
-- **反馈闭环**：每条回答下方 👍/👎 按钮，攒难例集(落盘到 `data/feedback.jsonl`)
-
-## 目录结构
+## 项目结构
 
 ```
 legal-assistant-rag/
 ├── data/
-│   ├── raw/              # 民法典原始 markdown（从 LawRefBook 下载，按编拆分）
-│   ├── processed/        # 解析后的统一 JSON（含全部已接入法律）
-│   └── feedback.jsonl    # 用户 👍/👎 反馈日志（运行时生成，攒难例集用）
-├── Laws/                 # LawRefBook/Laws 源仓库（本地克隆，不提交；接入多法律时需要）
+│   ├── processed/        # 解析后的统一 JSON（articles.json，含全部 38 部法律）
+│   └── feedback.jsonl    # 用户反馈日志
+├── Laws/                 # LawRefBook/Laws 克隆（本地，不入库，构建/扩展法律用）
 ├── src/
-│   ├── config.py        # 配置管理（API key、异构故障转移链、检索参数、品牌文案）
-│   ├── law_catalog.py   # 精选法律目录（定义接入哪些法律，加一行即可扩充）
-│   ├── parser.py        # 通用 LawRefBook 解析器（任意法律、多段条文、第X条之一）
-│   ├── embedding.py     # 可切换的 embedding 客户端（ModelScope/SiliconFlow）+ query 缓存
-│   ├── embed_cache.py   # query embedding 磁盘 LRU 缓存
-│   ├── bm25_retriever.py  # BM25 关键词检索（jieba 分词，分词语料磁盘缓存）
-│   ├── reranker.py      # rerank 精排客户端（可选，默认关闭）
-│   ├── vector_store.py  # 向量库 + 混合检索 + RRF 融合 + 距离闸门（跨法律唯一 ID）
-│   ├── rag.py           # RAG 问答链（检索 + 改写 + 配额感知故障转移 + 跨法律引用校验）
-│   ├── agent.py         # 多跳检索 Agent（LangGraph 状态机：Planner/Retrieve/Reflect/Answer）
-│   ├── tools.py         # Agent 工具层（检索包装 + 合并去重 + 交叉引用 + 时效计算）
-│   └── web.py           # Gradio Web 界面（流式 + 多轮 + 深度模式开关 + 轨迹展示 + 反馈）
+│   ├── config.py        # 配置（API key、故障转移链、检索参数）
+│   ├── law_catalog.py   # 精选法律目录（38 部法律清单）
+│   ├── parser.py        # 通用 LawRefBook 解析器
+│   ├── embedding.py     # 可切换 embedding（ModelScope/SiliconFlow）+ query 缓存
+│   ├── vector_store.py  # 向量库 + 混合检索 + RRF 融合
+│   ├── rag.py           # RAG 链（检索 + 改写 + 配额感知故障转移 + 引用校验）
+│   ├── agent.py         # 多跳检索 Agent（LangGraph：Planner/Retrieve/Reflect/Answer）
+│   └── tools.py         # Agent 工具（检索包装 + 交叉引用 + 时效计算）
+├── scripts/
+│   └── build_index.py   # 向量库构建脚本
 ├── eval/
-│   ├── README.md        # 评估体系说明（检索 Coverage / 答案质量 两种口径）
-│   ├── eval_set.json    # 检索评估集（100 题，覆盖 37 部法律）
-│   ├── evaluate.py      # 检索评估脚本（Recall@K / Hit@K / MRR）
-│   ├── answer_set.json  # 答案质量评估集（覆盖多部法律 + 负样本）
-│   ├── eval_answer.py   # 答案质量评估脚本（LLM-as-judge，支持 --mode single/agent）
-│   ├── multihop_set.json   # 多跳评估集（20 题，标注跨法律期望条文）
-│   ├── eval_multihop.py    # 多跳检索评估（Coverage/LawCoverage，支持 single/fixed/agent）
-│   └── *.json（结果）   # 各阶段评估结果（baseline/phase1/phase2/answer_*，见 eval/README.md）
-├── vector_store/        # 预构建向量库 + BM25 缓存（随仓库提交，供创空间免冷启动）
-│   └── _query_cache/    # query embedding 磁盘缓存（运行时生成，不入库）
-├── main.py              # 本地入口（setup / serve）
-├── app.py               # 创空间入口（0.0.0.0:7860 + 向量库缺失兜底构建）
-├── requirements.txt
-├── .env.example         # 配置模板
-└── README.md
+│   ├── README.md        # 评估体系说明
+│   ├── EVAL_REPORT.md   # 评估报告（双口径对比）
+│   ├── eval_set.json / answer_set.json / multihop_set.json  # 评估题集
+│   ├── evaluate.py / eval_answer.py / eval_multihop.py      # 评估脚本
+│   └── _discover_articles.py  # 多跳题辅助
+├── web/                  # Vue 3 前端（TypeScript + Vite + Pinia）
+├── vector_store/         # 预构建向量库（随仓库提交，免冷启动）
+├── api.py                # FastAPI 后端
+└── requirements.txt
 ```
-
-## 架构设计
-
-```
-用户提问
-    ↓
-0. 查询改写（多轮场景：用历史把追问补全成独立问题）
-    ↓
-1. 混合检索：向量召回 + BM25 召回 → 加权 RRF 融合（向量权重 5 : BM25 权重 1）
-    ↓
-2. 相关性闸门：最佳距离 > 阈值则判定无关，返回"未找到相关条文"
-    ↓
-3. 构造 Prompt（Top-K 条文 + 问题 + 强制引用指令）+ 历史对话
-    ↓
-4. LLM 流式生成（配额超限自动故障转移，末档可挂异构供应商兜底）
-    ↓
-5. 引用校验：按「《法律名》第X条」核对引用是否都在检索结果中（跨法律不串号）
-    ↓
-6. 返回（流式答案 + 引用条文 + 校验徽章 + 免责声明）
-```
-
-**数据流通用 Schema：**
-```python
-LawArticle {
-  law_name: "中华人民共和国公司法"
-  part: ""                  # 编（仅民法典等少数法律有）
-  chapter: "第一章 总则"
-  section: ""
-  article_no: 133           # 条号
-  sub_no: 1                 # "第X条之一"→1，普通条为 0；保证条号唯一不被覆盖
-  article_text: "在道路上驾驶机动车..."
-  effective_date: "2024-07-01"
-}
-```
-
-### 多跳检索 Agent（深度模式）
-
-上面的单跳链对"被违法辞退能不能告、怎么告"这类**多诉求问题**力不从心——单次检索召回的条文常不完整（赔偿标准、仲裁程序、时效分散在不同法律）。深度模式用 LangGraph 状态机解决：
-
-```
-                  ┌─────────────┐
-   用户提问 ───►   │  Planner    │  判断简单/复杂；复杂则拆成 2~4 个子问题
-                  └──────┬──────┘
-                         ↓
-              ┌──────────────────────┐
-              │   Retrieve            │  ◄── 复用单跳的混合检索栈（一行不改）
-              │   （逐子问题检索+合并去重）│
-              └──────────┬───────────┘
-                         ↓
-                  ┌──────────────┐   不够（缺哪个诉求点）
-                  │  Reflect     │ ──────────────► 回 Retrieve（受 max_hops 上限）
-                  └──────┬───────┘
-                         ↓ 够了
-                  ┌──────────────┐
-                  │  Answer      │  复用单跳的 prompt + 引用校验
-                  └──────────────┘
-```
-
-**关键设计**：
-- **模型分级**：Planner/Reflect 用便宜快模型，Answer 用强模型——压住多跳放大的 API 成本
-- **可降级**：Planner 判简单题直接单跳作答，不为难简单题（守住回归底线）
-- **防死循环**：`MAX_HOPS` 硬上限 + 每跳子问题去重
-- **可观测**：每节点写 trace（查了什么、Reflect 怎么判断），Web 端展示检索轨迹
-- **专用工具**（可选）：交叉引用（顺"依照第X条"拉关联条文）、时效计算（劳动/民事/刑事）
-
-效果：跨法律条文召回率（Coverage）从单跳 0.597 提升到 0.825，且整部法律不再漏召（LawCoverage 0.95→0.98）。详见 [EVAL_REPORT.md](EVAL_REPORT.md)。
 
 ## 技术栈
 
-- **数据源**：[LawRefBook/Laws](https://github.com/LawRefBook/Laws) 法律 markdown（通用解析器）
-- **Embedding**：SiliconFlow API（推荐，bge-m3）/ ModelScope API（备选）+ query 磁盘缓存
-- **关键词检索**：jieba 分词 + rank_bm25（BM25Okapi），分词语料磁盘缓存
-- **向量库**：ChromaDB（本地文件型）
-- **检索融合**：加权 Reciprocal Rank Fusion（RRF）
-- **LLM**：ModelScope API（DeepSeek-V4-Flash / V3.2 / Qwen3.5 / GLM-5.1 / Kimi-K2.5 等中文模型，支持跨供应商异构故障转移，断路器自动跳过已耗尽/限速档）
-- **Web 框架**：Gradio
+- **后端**：FastAPI + LangGraph（多跳 Agent 状态机）
+- **前端**：Vue 3 + TypeScript + Vite + Tailwind CSS v4 + Pinia
+- **向量库**：ChromaDB（本地持久化）
+- **检索**：向量召回（BAAI/bge-base-zh-v1.5）+ BM25 + RRF 融合
+- **LLM**：ModelScope / SiliconFlow API（可切换，支持异构故障转移）
 
-## 评估
+## 评估体系
 
-### 检索评估（Recall / Hit / MRR）
-
-量化检索质量，每次调参后可对比效果：
+### 检索质量（Recall/Coverage）
 
 ```bash
-python -m eval.evaluate            # 用默认 Top-K
-python -m eval.evaluate --top-k 10
+python -m eval.evaluate                    # 基础单跳检索（100 题，37 部法律）
+python -m eval.eval_multihop --mode single # 单跳基线（20 题多跳题集）
+python -m eval.eval_multihop --mode agent  # Agent 深度模式
 ```
 
-指标说明：
-- **Recall@K**：期望条文被召回的比例
-- **Hit@K**：至少命中一条期望条文的题目比例
-- **MRR**：首个命中条文排名的倒数（衡量命中条文是否靠前）
-
-当前混合检索在 100 题评估集（覆盖 37 部法律）上：Recall@8 ≈ 0.975，Hit@8 = 1.000，MRR ≈ 0.866。
-
-### 答案质量评估（LLM-as-judge）
-
-检索好不等于答得好。答案评估跑完整 RAG，再用裁判模型按四个维度打分（1~5）：
-准确性 / 忠于检索 / 引用规范 / 表达清晰，并含一道无关问题负样本（考察是否正确拒答）。
-
-```bash
-python -m eval.eval_answer                 # 评估全部题目
-python -m eval.eval_answer --limit 3       # 只评前 3 题（省配额）
-python -m eval.eval_answer --save out.json # 同时落盘逐题明细
-```
-
-> 答案评估每题至少 2 次 LLM 调用（生成 + 裁判），注意配额。`--mode agent` 走多跳 Agent。
-
-### 多跳检索评估（Coverage，深度模式）
-
-衡量多跳 Agent 相对单跳的召回提升，题集是 20 道答案需 ≥2 次检索才完整的多跳题：
-
-```bash
-python -m eval.eval_multihop --mode single          # 单跳基线
-python -m eval.eval_multihop --mode fixed           # 固定多跳（先拆完一次性查）
-python -m eval.eval_multihop --mode agent           # LangGraph Agent（自适应补跳）
-```
+**多跳评估结果**（20 题，需 ≥2 次检索才完整）：
 
 | 模式 | Coverage | LawCoverage | 平均轮数 |
 |------|----------|-------------|----------|
 | 单跳基线 | 0.597 | 0.950 | 1 |
-| 固定多跳 | 0.666 | 0.983 | 2.0 |
 | **Agent（深度模式）** | **0.825** | **0.983** | 1.90 |
 
-> 单跳即便把 top_k 翻倍（8→16）也只到 0.73——证明缺口是结构性的（单 query 召不全跨法律条文簇），
-> 需要多跳规划。完整评估报告见 [EVAL_REPORT.md](EVAL_REPORT.md)，两种口径说明见 [eval/README.md](eval/README.md)。
+> Coverage：期望条文被召回的比例；LawCoverage：期望涉及的法律被触及的比例。
+> 详见 [eval/EVAL_REPORT.md](eval/EVAL_REPORT.md) 和 [eval/README.md](eval/README.md)。
 
-### 反馈难例闭环
+### 答案质量（LLM-as-judge）
 
-每条 AI 回答下方都有 👍/👎 按钮，点击会把当前问题、改写后的查询、引用条文、引用校验状态等
-追加到 `data/feedback.jsonl`（每行一条 JSON）。攒一段时间后，可把"👎"或"引用校验告警"的题目
-挑出来回灌进 `eval/eval_set.json` / `answer_set.json`，定向修补检索/生成质量。
+```bash
+python -m eval.eval_answer --mode single   # 单跳模式
+python -m eval.eval_answer --mode agent    # 深度模式
+python -m eval.eval_answer --limit 3       # 只评前 3 题（省配额）
+```
 
-可在 `.env` 设 `FEEDBACK_LOG_ENABLED=false` 关闭。
+用裁判模型按四维度打分（1~5）：准确性 / 忠于检索 / 引用规范 / 表达清晰。
 
 ## 扩展更多法律
 
-解析器已通用化，新增一部 LawRefBook 法律**无需改代码**：
+新增法律无需改代码：
 
-1. 把 [LawRefBook/Laws](https://github.com/LawRefBook/Laws) 克隆到项目根的 `Laws/` 目录
-2. 在 [src/law_catalog.py](src/law_catalog.py) 的 `LAW_CATALOG` 加一行：`("分类/法律名(日期).md", "生效日期")`
-3. 重新运行 `python main.py setup`
+1. 克隆 [LawRefBook/Laws](https://github.com/LawRefBook/Laws) 到项目根的 `Laws/` 目录
+2. 在 [src/law_catalog.py](src/law_catalog.py) 的 `LAW_CATALOG` 加一行：
+   ```python
+   ("分类/法律名(日期).md", "生效日期")
+   ```
+3. 重新运行 `python scripts/build_index.py`
 
-解析器会自动识别法律名（取文件首个 `# 标题`）、跳过 `<!-- INFO END -->` 元信息、正确处理多段条文与「第X条之一」。条文 ID 以 `(法律名, 条号, 之N)` 组合保证跨法律唯一，引用校验也按法律名区分，互不串号。
+解析器自动识别法律名、处理多段条文与「第X条之一」，条文 ID 以 `(法律名, 条号, 之N)` 保证跨法律唯一。
 
-**注意接入范围**：精选目录刻意只含高频「法律」正文，未含司法解释 / 案例 / 地方法规——它们体量大、格式各异，会显著抬高 embedding 成本与向量库体积。接入越多，向量库越大（setup 末尾有体积护栏提示）。
+> **注意**：接入越多，向量库越大（setup 末尾有体积护栏提示）。精选目录刻意只含高频「法律」正文，未含司法解释/案例/地方法规。
 
-## 部署到 ModelScope 创空间
+## 部署
 
-本项目已为创空间部署做了适配：入口是 [app.py](app.py)（创空间默认运行它），绑定 `0.0.0.0:7860` 对外提供服务。**预构建向量库（`vector_store/`）和解析后的 JSON（`data/processed/`）已随仓库提交**，因此创空间冷启动无需重建索引，也不消耗 embedding 配额；万一向量库缺失，`app.py` 会现场兜底构建。
+### 单端口（生产，前后端合体）
 
-部署步骤：
+构建前端后，FastAPI 直接托管静态产物 + 提供 API，单进程单端口：
 
-1. 在 [ModelScope 创空间](https://modelscope.cn/studios) 创建新应用（SDK 选 Gradio）
-2. 将本仓库推送 / 上传到创空间 Git（确保 `vector_store/` 一并提交）
-3. 在创空间「环境变量」中配置密钥（**不要把 `.env` 提交到仓库**）：
-   - `MODELSCOPE_API_KEY` —— LLM 生成
-   - `SILICONFLOW_API_KEY` —— 每次提问的 query embedding
-   - `EMBEDDING_PROVIDER=siliconflow`
-   - 可选：`LLM_MODEL` / `LLM_FALLBACK_MODELS`
-4. 创空间会自动运行 `app.py`，发布后即可获得永久公网 URL
+```bash
+cd web && npm run build && cd ..   # 产出 web/dist
+python api.py                       # 默认 :8000，访问 http://localhost:8000
+```
 
-> 说明：query embedding 在每次提问时仍需调用 embedding API，因此 `SILICONFLOW_API_KEY` 必须配置；只有「构建向量库」这一步被预提交的索引省掉了。
+`api.py` 在 `/` 托管 `web/dist`、`/api/*` 提供接口，端口由环境变量 `PORT` 控制（默认 8000）。
+
+### Docker / ModelScope 创空间
+
+仓库含 [Dockerfile](Dockerfile)（多阶段：Node 构建前端 → Python 运行），监听 `7860`：
+
+```bash
+docker build -t legal-assistant .
+docker run -p 7860:7860 --env-file .env legal-assistant
+```
+
+创空间部署（SDK 选 **Docker**）：
+1. 推送仓库到创空间 Git（确保 `vector_store/` + `data/processed/` 一并提交，免冷启动重建）
+2. 在创空间「环境变量」配置密钥（**勿提交 `.env`**）：`MODELSCOPE_API_KEY` / `SILICONFLOW_API_KEY` / `EMBEDDING_PROVIDER=siliconflow`
+3. 创空间按 Dockerfile 构建，发布后获得公网 URL
+
+> 仅运行无需重建索引；但 query embedding 每次提问仍调 API，`SILICONFLOW_API_KEY` 必须配置。
+
+### 本地开发（前后端分离，热更新）
+
+```bash
+python api.py          # 后端 :8000
+cd web && npm run dev  # 前端 :5173（Vite 代理 /api → :8000）
+```
 
 ## 注意事项
 
-- **法律时效性**：各部法律以接入时 LawRefBook 收录的版本为准（见 `effective_date`），不含后续修正与司法解释；以官方最新公布文本为准
+- **法律时效性**：以接入时 LawRefBook 版本为准（见 `effective_date`），不含后续修正
 - **免责声明**：所有答案仅供参考，不构成法律建议
-- **API 限额**：免费 API 有调用次数限制，生产环境建议升级付费或本地部署模型
-- **数据准确性**：虽已尽力确保，但法律条文解析可能存在误差，使用前请核对原文
+- **API 限额**：免费 API 有调用次数限制，注意配额
+- **数据准确性**：法律条文解析可能存在误差，使用前请核对原文
 
 ## License
 
-本项目代码采用 MIT 协议。
-
-法律数据来源于 [LawRefBook/Laws](https://github.com/LawRefBook/Laws)，为公开法律文本。
+代码采用 MIT 协议。法律数据来源于 [LawRefBook/Laws](https://github.com/LawRefBook/Laws)（公开法律文本）。

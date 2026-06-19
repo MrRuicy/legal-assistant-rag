@@ -231,7 +231,7 @@ class VectorStore:
 
 def build_vector_store():
     """从已解析的 JSON 构建向量库（独立脚本入口）。"""
-    json_path = config.DATA_PROCESSED_DIR / "civil_code.json"
+    json_path = config.DATA_PROCESSED_DIR / "articles.json"
     if not json_path.exists():
         print(f"ERROR - {json_path} not found. Run parser.py first.")
         return

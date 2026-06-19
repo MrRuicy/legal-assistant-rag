@@ -314,33 +314,50 @@ def _reflect_node(rag: LegalRAG, tools):
 
 # ---- Answer ----
 
+def _prepare_answer(rag: LegalRAG, state: AgentState):
+    """构造作答所需的 (hits_truncated, messages)。
+
+    _answer_node（非流式，run/评估）与 run_stream（流式）共用此函数，
+    保证两条路径的上下文截断、system prompt、user prompt 完全一致，作答口径不漂移。
+
+    返回:
+        (hits, messages)；无检索结果时 messages 为 None（调用方走 fallback）。
+    """
+    hits = state.get("hits", [])
+    question = state["question"]
+    if not hits:
+        return [], None
+
+    # 多跳累积的条文去重后可能很多 → 截断到 AGENT_MAX_CONTEXT，控制上下文长度与成本。
+    # hits 已按召回先后去重，靠前的更相关，故直接取前 N 条。
+    if len(hits) > config.AGENT_MAX_CONTEXT:
+        hits = hits[:config.AGENT_MAX_CONTEXT]
+
+    # 复用 LegalRAG 的 system prompt 与上下文格式（含法律名、强制引用、免责）
+    context = format_articles_context(hits)
+    system_prompt = rag._system_prompt(hits)
+    user_prompt = (
+        f"问题：{question}\n\n"
+        f"检索到的相关条文：\n{context}\n\n"
+        f'请根据上述条文回答问题，引用时写明"《法律名》第X条"。'
+    )
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(rag._recent_history_messages(state.get("history")))
+    messages.append({"role": "user", "content": user_prompt})
+    return hits, messages
+
+
+# 无检索结果时的统一兜底（_answer_node 与 run_stream 共用，口径一致）
+_NO_HITS_ANSWER = "未找到相关法律条文，无法回答该问题。"
+_NO_HITS_VERIFY = {"status": "none", "cited": [], "fabricated": [], "message": "无检索结果。"}
+
+
 def _answer_node(rag: LegalRAG):
     def node(state: AgentState) -> AgentState:
-        hits = state.get("hits", [])
-        question = state["question"]
+        hits, messages = _prepare_answer(rag, state)
 
-        if not hits:
-            return {
-                "answer": "未找到相关法律条文，无法回答该问题。",
-                "verify": {"status": "none", "cited": [], "fabricated": [], "message": "无检索结果。"},
-            }
-
-        # 多跳累积的条文去重后可能很多 → 截断到 AGENT_MAX_CONTEXT，控制上下文长度与成本。
-        # hits 已按召回先后去重，靠前的更相关，故直接取前 N 条。
-        if len(hits) > config.AGENT_MAX_CONTEXT:
-            hits = hits[:config.AGENT_MAX_CONTEXT]
-
-        # 复用 LegalRAG 的 system prompt 与上下文格式（含法律名、强制引用、免责）
-        context = format_articles_context(hits)
-        system_prompt = rag._system_prompt(hits)
-        user_prompt = (
-            f"问题：{question}\n\n"
-            f"检索到的相关条文：\n{context}\n\n"
-            f'请根据上述条文回答问题，引用时写明"《法律名》第X条"。'
-        )
-        messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(rag._recent_history_messages(state.get("history")))
-        messages.append({"role": "user", "content": user_prompt})
+        if messages is None:
+            return {"answer": _NO_HITS_ANSWER, "verify": dict(_NO_HITS_VERIFY)}
 
         # Answer 用强模型（默认故障转移链，不传 providers）
         answer_text = rag._complete(messages=messages, temperature=0.1)
@@ -466,21 +483,25 @@ class LegalAgent:
         }
 
     def run_stream(self, question: str, history: List[Dict] = None):
-        """流式包装器：用 graph.stream 逐节点实时 yield，让多跳轨迹像「思考过程」
-        一样边跑边冒出来（而非整图跑完才一次性出现）。
+        """流式包装器：多跳轨迹逐节点实时 yield，作答逐 token 流式 yield。
 
         Yields:
             Dict，每个 chunk:
             {
-                "type": "trace" | "references" | "answer" | "verify" | "disclaimer",
+                "type": "trace" | "references" | "answer" | "verify" | "disclaimer" | "error",
                 "content": ...
             }
-        - 每个节点（planner/retrieve/reflect）跑完即 yield 一次累积 trace，前端实时重绘轨迹。
-        - answer 节点跑完再 yield references / answer / verify / disclaimer。
-        与单跳 answer_stream 口径对齐，便于 web.py 统一处理。
+        - planner/retrieve/reflect 每跑完即 yield 累积 trace，前端实时重绘轨迹。
+        - 在 answer 节点执行**之前**停下（graph.stream 生成器惰性，未消费则该节点不运行），
+          改由本方法用 rag._stream_complete 逐 token 流式作答 → references / answer*N / verify / disclaimer。
+        - 作答 prompt 与 _answer_node 共用 _prepare_answer，口径不漂移。
+        与单跳 answer_stream 的 chunk 口径对齐，web.py / 前端统一处理。
         """
-        trace_acc: List[Dict] = []      # 累积轨迹（增量拼接）
-        final_state: Dict = {}          # 最后一个节点的完整状态
+        # 用输入种子 final_state，确保 _prepare_answer 能读到 question/history
+        final_state: Dict = {"question": question, "history": history or []}
+        trace_acc: List[Dict] = []
+        streamed = False  # 是否已走流式作答（异常兜底时判断）
+
         try:
             for chunk in self.graph.stream(
                 {"question": question, "history": history or []},
@@ -491,23 +512,74 @@ class LegalAgent:
                     if not isinstance(delta, dict):
                         continue
                     final_state.update(delta)
-                    # 该节点若产出了新 trace 记录，累积并实时 yield
                     node_trace = delta.get("trace")
                     if node_trace:
-                        trace_acc = node_trace  # trace 在状态里是全量累积的，直接用最新值
+                        trace_acc = node_trace  # trace 在状态里全量累积，取最新值
                         yield {"type": "trace", "content": list(trace_acc)}
+
+                # 关键：若下一步将进入 answer 节点，则在此停下，改由本方法流式作答。
+                # 不消费后续生成器 → answer 节点不会执行（惰性求值）。
+                if node_name == "retrieve" and _route_after_retrieve(final_state) == "answer":
+                    break
+                if node_name == "reflect" and _route_after_reflect(final_state) == "answer":
+                    break
+
+            # 流式作答（替代 answer 节点）
+            yield from self._stream_answer(final_state, trace_acc)
+            streamed = True
+
         except Exception:
-            # 图执行异常：退回非流式，至少给出已有结果（不阻断作答）
+            if streamed:
+                raise  # 流式作答中途失败：已交给 _stream_answer 内部处理
+            # 图执行异常：退回非流式 invoke，至少给出结果（不阻断作答）
             final_state = self.graph.invoke(
                 {"question": question, "history": history or []}
             )
             if final_state.get("trace"):
                 yield {"type": "trace", "content": list(final_state["trace"])}
+            yield {"type": "references", "content": final_state.get("hits", [])}
+            yield {"type": "answer", "content": final_state.get("answer", "")}
+            yield {"type": "verify", "content": final_state.get("verify", {})}
+            yield {"type": "disclaimer", "content": self.rag._disclaimer()}
 
-        # 节点跑完后，yield references / answer / verify / disclaimer
-        yield {"type": "references", "content": final_state.get("hits", [])}
-        yield {"type": "answer", "content": final_state.get("answer", "")}
-        yield {"type": "verify", "content": final_state.get("verify", {})}
+    def _stream_answer(self, state: Dict, trace_acc: List[Dict]):
+        """在 answer 节点之前接管：流式作答 + 校验 + 免责。
+
+        与 _answer_node 共用 _prepare_answer，保证上下文/prompt 一致。
+        """
+        hits, messages = _prepare_answer(self.rag, state)
+
+        # 补一条 answer 轨迹（answer 节点没跑，前端需要「作答」这一步）
+        trace = list(trace_acc)
+        trace.append({"node": "answer", "n_context": len(hits)})
+        yield {"type": "trace", "content": trace}
+
+        # 先 yield 引用（截断后的 hits，与作答上下文一致）
+        yield {"type": "references", "content": hits}
+
+        if messages is None:
+            # 无检索结果兜底（与 _answer_node 口径一致）
+            yield {"type": "answer", "content": _NO_HITS_ANSWER}
+            yield {"type": "verify", "content": dict(_NO_HITS_VERIFY)}
+            yield {"type": "disclaimer", "content": self.rag._disclaimer()}
+            return
+
+        # 逐 token 流式作答（强模型故障转移链，复用单跳的 _stream_complete）
+        answer_parts: List[str] = []
+        try:
+            for piece in self.rag._stream_complete(messages, temperature=0.1):
+                answer_parts.append(piece)
+                yield {"type": "answer", "content": piece}
+        except Exception as e:
+            if self.rag._is_quota_error(e):
+                yield {"type": "error", "content": "所有模型今日配额均已用尽，请稍后再试或明日重试。"}
+            else:
+                yield {"type": "error", "content": f"LLM 调用失败：{str(e)}"}
+            return
+
+        # 校验引用 + 免责
+        verify = self.rag._verify_citations("".join(answer_parts), hits)
+        yield {"type": "verify", "content": verify}
         yield {"type": "disclaimer", "content": self.rag._disclaimer()}
 
 

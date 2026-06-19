@@ -17,30 +17,30 @@
   - `LawCoverage`：期望涉及的法律被触及的比例
   - `avg_hops/avg_rounds`：平均检索轮数
 
-**用法**：
+**用法**:
 ```bash
 python -m eval.eval_multihop --mode single          # 单跳基线
 python -m eval.eval_multihop --mode fixed           # Phase 1 固定多跳
-python -m eval.eval_multihop --mode agent --save xx.json  # Phase 2 Agent
+python -m eval.eval_multihop --mode agent --save out.json  # Phase 2 Agent,保存结果
 ```
 
-**结果文件与数据**：
+**历史成绩记录**:
 
-| 文件 | 阶段 | Coverage | LawCoverage | 平均轮数 |
-|------|------|----------|-------------|----------|
-| `baseline_singlehop.json` | 单跳基线 | 0.597 | 0.950 | 1 |
-| `phase1_fixed_multihop.json` | Phase 1 固定多跳（占位实现，固定 2 跳） | 0.666 | 0.983 | 2.0 |
-| `phase2_agent.json` | Phase 2 Agent v1（历史，MAX_CONTEXT=16，旧 Reflect） | 0.716 | 0.958 | 1.15 |
-| `phase2_agent_v2.json` | Phase 2 Agent v2（历史，MAX_CONTEXT=24 + 新 Reflect） | 0.838 | 0.983 | 1.90 |
-| `phase2_agent_fixed.json` | **Phase 2 Agent（2026-06 修复后，含 #10 守卫 + 工具统计）** | **0.825** | **0.983** | 1.90 |
+| 阶段 | Coverage | LawCoverage | 平均轮数 |
+|------|----------|-------------|----------|
+| 单跳基线 | 0.597 | 0.950 | 1 |
+| Phase 1 固定多跳（占位实现，固定 2 跳） | 0.666 | 0.983 | 2.0 |
+| Phase 2 Agent v1（历史，MAX_CONTEXT=16，旧 Reflect） | 0.716 | 0.958 | 1.15 |
+| Phase 2 Agent v2（历史，MAX_CONTEXT=24 + 新 Reflect） | 0.838 | 0.983 | 1.90 |
+| **Phase 2 Agent（2026-06 修复后，含 #10 守卫 + 工具统计）** | **0.825** | **0.983** | 1.90 |
 
-> ⚠️ 注意：这些数字测的是**检索 Coverage**（不是答案质量）。`phase2_agent_fixed.json` 是最新口径，
-> 含 9+1 项 bug 修复（交叉引用方向/条号正则/AGENT_MAX_CONTEXT 截断/#10 工具短路守卫等）。
+> ⚠️ 注意：这些数字测的是**检索 Coverage**（不是答案质量）。最新版本含 9+1 项 bug 修复
+> （交叉引用方向/条号正则/AGENT_MAX_CONTEXT 截断/#10 工具短路守卫等）。
 > v2 的 0.838 与 fixed 的 0.825 差异在小样本(20题)+LLM 非确定性下属噪声；fixed 版工具命中率从虚高的
 > 0.55 降到合理的 0.25，且工具触发组 Coverage(0.927) 显著高于未触发组(0.791)——工具真正生效。
-> 完整分析见 [../EVAL_REPORT.md](../EVAL_REPORT.md)。
+> 完整分析见 [EVAL_REPORT.md](EVAL_REPORT.md)。
 
-**关键结论**：单跳调大 top_k（8→16）只到 0.688，而 Agent 多跳到 0.838——证明缺口是结构性的
+**关键结论**：单跳调大 top_k（8→16）只到 0.688，而 Agent 多跳到 0.825——证明缺口是结构性的
 （单 query 召不全跨法律条文簇），需要多跳规划而非单纯增大 top_k。
 
 ---
@@ -53,23 +53,23 @@ python -m eval.eval_multihop --mode agent --save xx.json  # Phase 2 Agent
 - **题集**：`answer_set.json`（8 道题，带 `key_points` 供裁判核对，含 1 道负样本）
 - **维度**：accuracy（准确性）/ grounding（忠于检索）/ citation（引用规范）/ clarity（清晰度）
 
-**用法**：
+**用法**:
 ```bash
 python -m eval.eval_answer --mode single --save answer_single.json   # 单跳
 python -m eval.eval_answer --mode agent  --save answer_agent.json    # 多跳 Agent
 python -m eval.eval_answer --limit 3                                 # 只评前 3 题（省配额）
 ```
 
-**结果文件与数据**：
+**历史成绩记录**:
 
-| 文件 | 模式 | accuracy | grounding | citation | clarity | 综合 |
-|------|------|----------|-----------|----------|---------|------|
-| `answer_single.json` | 单跳 | 4.62 | 4.25 | 4.75 | 4.88 | 4.62 |
-| `answer_agent.json` | 多跳 Agent | （未跑完，见下） | | | | |
+| 模式 | accuracy | grounding | citation | clarity | 综合 |
+|------|----------|-----------|----------|---------|------|
+| 单跳 | 4.62 | 4.25 | 4.75 | 4.88 | 4.62 |
+| 多跳 Agent | （部分跑过，见下） | | | | |
 
 > Agent 版答案质量评估部分跑过，发现一个值得注意的现象：**多跳 Agent 不一定优于单跳**。
-> 例如「危险驾驶罪和交通肇事罪区别」一题，Agent 跑 3 轮后反而以「检索缺失」为由拒答（acc 偏低），
-> 印证了 PLAN.md 风险点「简单/对比题上 Agent 可能画蛇添足」。这也是保留单跳模式 + 深度模式开关的依据。
+> 例如「危险驾驶罪和交通肇事罪区别」一题，Agent 跑 3 轮后反而以「检索缺失」为由拒答（acc 偏低）——
+> 简单/对比题上 Agent 可能画蛇添足。这也是保留单跳模式 + 深度模式开关的依据。
 
 ---
 
@@ -84,7 +84,7 @@ python -m eval.eval_answer --limit 3                                 # 只评前
 
 ## 两种口径如何配合
 
-- **Coverage（口径 A）** 回答「检索够不够全」——多跳的核心价值在这里（0.597→0.838）。
+- **Coverage（口径 A）** 回答「检索够不够全」——多跳的核心价值在这里（0.597→0.825）。
 - **答案质量（口径 B）** 回答「最终答案好不好」——守住底线：Agent 不能在简单题上退化。
 
 二者正交：高 Coverage 是好答案的必要条件，但不充分（条文召回了，LLM 也可能答偏）。

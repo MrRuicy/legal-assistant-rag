@@ -2,7 +2,7 @@
 
 数据源是本地克隆的 LawRefBook/Laws 仓库（默认在项目根的 `Laws/` 下，仅本地存在、
 不随本仓库提交）。每条目指向 Laws 里的一个 markdown 文件；setup 时统一解析、合并、
-构建向量库，构建产物（vector_store/ + civil_code.json）随仓库提交以支持创空间部署。
+构建向量库，构建产物（vector_store/ + articles.json）随仓库提交以支持创空间部署。
 
 只精选高频常用的「法律」正文，刻意不含司法解释 / 案例 / 地方法规：
 - 它们体量巨大，会显著抬高 embedding 成本与向量库体积；

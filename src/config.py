@@ -11,7 +11,6 @@ load_dotenv()
 
 # ---- 路径 ----
 ROOT_DIR = Path(__file__).resolve().parent.parent
-DATA_RAW_DIR = ROOT_DIR / "data" / "raw"  # 原始法律文本（markdown）
 DATA_PROCESSED_DIR = ROOT_DIR / "data" / "processed"  # 解析后的统一 schema json
 VECTOR_STORE_DIR = ROOT_DIR / "vector_store"  # ChromaDB 持久化目录
 COLLECTION_NAME = "chinese_laws"
